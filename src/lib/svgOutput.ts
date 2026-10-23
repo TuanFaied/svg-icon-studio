@@ -54,7 +54,8 @@ export function useSvgBlobUrl(svg: string): string | null {
   useEffect(() => {
     let clean: string;
     try {
-      clean = sanitizeSvg(svg);
+      // Validated animation CSS stays, so animated icons play in every preview.
+      clean = sanitizeSvg(svg, { allowAnimationCss: true });
     } catch {
       clean = '';
     }
