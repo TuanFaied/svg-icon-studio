@@ -1,0 +1,127 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --panel-2: #f3f4f6;
+  --border: #e2e5ea;
+  --border-strong: #c9ced6;
+  --text: #15181d;
+  --muted: #5b6370;
+  --accent: #2563eb;
+  --accent-fg: #ffffff;
+  --accent-soft: #e8efff;
+  --danger: #c62828;
+  --warn-bg: #fff7e0;
+  --warn-fg: #7a4b00;
+  --canvas-bg: #e9ebef;
+  --checker-a: #ffffff;
+  --checker-b: #e3e6ea;
+  --grid-line: rgba(15, 23, 42, 0.13);
+  --boundary: rgba(15, 23, 42, 0.45);
+  --focus: #2563eb;
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --bg: #111317;
+  --panel: #191c21;
+  --panel-2: #22262c;
+  --border: #2c3138;
+  --border-strong: #3c434c;
+  --text: #e8eaee;
+  --muted: #a1a9b5;
+  --accent: #6b9bff;
+  --accent-fg: #0b1020;
+  --accent-soft: #1e2a44;
+  --danger: #ff8a80;
+  --warn-bg: #3a2e12;
+  --warn-fg: #ffd98a;
+  --canvas-bg: #0c0e11;
+  --checker-a: #2a2e35;
+  --checker-b: #22252b;
+  --grid-line: rgba(255, 255, 255, 0.1);
+  --boundary: rgba(255, 255, 255, 0.4);
+  --focus: #8db1ff;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-fg: var(--warn-fg);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.checker {
+  background-color: var(--checker-a);
+  background-image:
+    linear-gradient(45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker-b) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker-b) 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+}
+
+.pixelated {
+  image-rendering: pixelated;
+}
+
+/* Range input styling */
+input[type='range'] {
+  accent-color: var(--accent);
+}
+
+dialog::backdrop {
+  background: rgba(10, 12, 16, 0.45);
+}
+
+.cm-editor {
+  height: 100%;
+  font-size: 12px;
+}
+.cm-editor.cm-focused {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
