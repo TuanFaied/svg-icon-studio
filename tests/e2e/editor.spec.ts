@@ -120,6 +120,9 @@ test.describe('convert', () => {
   });
 
   test('a large photo is downscaled, traced off the main thread, and warns about size', async ({ page }) => {
+    // Color-tracing a 1600×1200 photo is the heaviest job in the suite; with
+    // other tests running in parallel it can take 40–50s, so give it 3× the budget.
+    test.slow();
     const jpg = await makeImage(page, 'photo');
     await page.getByTestId('image-input').setInputFiles({ name: 'photo.jpg', mimeType: 'image/jpeg', buffer: jpg });
     await expect(page.getByText(/processed at|No transparency/).first()).toBeVisible();

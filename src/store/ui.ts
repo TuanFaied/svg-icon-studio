@@ -4,7 +4,7 @@ import { create } from 'zustand';
 
 export type Mode = 'draw' | 'convert';
 export type ThemePref = 'system' | 'light' | 'dark';
-export type DialogId = 'export' | 'shortcuts' | 'resize' | 'recent' | 'reset' | null;
+export type DialogId = 'export' | 'shortcuts' | 'resize' | 'recent' | 'reset' | 'templates' | null;
 
 export interface Toast {
   id: number;

@@ -3,6 +3,7 @@
 import { Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ResizeDialog } from '@/components/editor/CanvasSettings';
+import { TemplatesDialog } from '@/components/editor/TemplatesDialog';
 import { ExportDialog } from '@/components/output/ExportDialog';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button, IconButton, Kbd } from '@/components/ui/primitives';
@@ -70,6 +71,13 @@ function ResetDialog() {
           >
             New
           </Button>
+        </div>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-medium">Start from a template</p>
+            <p className="text-[12px] text-muted">Pick an animated loader to edit. Can be undone.</p>
+          </div>
+          <Button onClick={() => useUi.getState().openDialog('templates')}>Templates</Button>
         </div>
       </div>
     </Dialog>
@@ -146,6 +154,7 @@ export function Dialogs() {
       <ResizeDialog />
       <ResetDialog />
       <RecentDialog />
+      <TemplatesDialog />
     </>
   );
 }

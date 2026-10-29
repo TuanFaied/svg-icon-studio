@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, FolderOpen, History as HistoryIcon, Keyboard, Monitor, Moon, Redo2, RotateCcw, Sun, Undo2 } from 'lucide-react';
+import { Download, FolderOpen, History as HistoryIcon, Keyboard, LayoutTemplate, Monitor, Moon, Redo2, RotateCcw, Sun, Undo2 } from 'lucide-react';
 import { Button, IconButton, Segmented } from '@/components/ui/primitives';
 import { openProjectFile } from '@/lib/actions';
 import { useDocument } from '@/store/document';
@@ -64,6 +64,9 @@ export function AppHeader({ compact }: { compact?: boolean }) {
         </IconButton>
         <IconButton label="Reset" onClick={() => openDialog('reset')}>
           <RotateCcw size={16} />
+        </IconButton>
+        <IconButton label="Loader templates" onClick={() => openDialog('templates')}>
+          <LayoutTemplate size={16} />
         </IconButton>
         {!compact && (
           <>

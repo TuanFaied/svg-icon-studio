@@ -2,7 +2,8 @@
 
 import { createStore, del, get, set } from 'idb-keyval';
 import { gridToRgba } from '@/core/export/encode';
-import { decodeShare, parseProject, serializeProject } from '@/core/project/project';
+import type { Grid } from '@/core/grid/grid';
+import { decodeShare, parseProject, type Project, serializeProject } from '@/core/project/project';
 import { currentProject, useDocument } from '@/store/document';
 
 const store = typeof indexedDB !== 'undefined' ? createStore('svg-icon-studio', 'projects') : undefined;
@@ -21,8 +22,7 @@ export interface RecentEntry {
   json: string;
 }
 
-function thumbnail(): string {
-  const { grid } = useDocument.getState();
+function thumbnail(grid: Grid): string {
   const scale = Math.max(1, Math.floor(64 / Math.max(grid.width, grid.height)));
   const c = document.createElement('canvas');
   c.width = grid.width * scale;
@@ -33,14 +33,28 @@ function thumbnail(): string {
   return c.toDataURL('image/png');
 }
 
-export async function saveNow(): Promise<void> {
+/** Writes a project into Recent projects; with `asCurrent`, also as the autosave restored on reload. */
+async function saveProject(id: string, project: Project, asCurrent: boolean): Promise<void> {
   if (!store) return;
-  const s = useDocument.getState();
-  const json = serializeProject(currentProject());
-  await set(CURRENT_KEY, { id: s.id, json }, store);
-  const recent = ((await get<RecentEntry[]>(RECENT_KEY, store)) ?? []).filter((r) => r.id !== s.id);
-  recent.unshift({ id: s.id, name: s.name, updatedAt: Date.now(), width: s.grid.width, height: s.grid.height, thumbnail: thumbnail(), json });
+  const json = serializeProject(project);
+  if (asCurrent) await set(CURRENT_KEY, { id, json }, store);
+  const recent = ((await get<RecentEntry[]>(RECENT_KEY, store)) ?? []).filter((r) => r.id !== id);
+  const { grid } = project;
+  recent.unshift({ id, name: project.name, updatedAt: Date.now(), width: grid.width, height: grid.height, thumbnail: thumbnail(grid), json });
   await set(RECENT_KEY, recent.slice(0, RECENT_LIMIT), store);
+}
+
+export async function saveNow(): Promise<void> {
+  await saveProject(useDocument.getState().id, currentProject(), true);
+}
+
+/**
+ * Keeps a project that is about to be replaced in Recent projects. Take the
+ * snapshot before replacing; the open document is untouched, so this can run
+ * after the swap without racing it.
+ */
+export async function saveToRecent(id: string, project: Project): Promise<void> {
+  await saveProject(id, project, false);
 }
 
 export async function listRecent(): Promise<RecentEntry[]> {
