@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { cellCenter, openApp } from './helpers';
 
@@ -12,9 +13,17 @@ const ANIMATED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" widt
 async function pasteIntoCodePanel(page: Page, svg: string) {
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   const content = page.locator('[data-testid=code-editor] .cm-content');
-  await content.click();
-  await page.keyboard.press('Control+a');
-  await page.keyboard.insertText(svg);
+  // Replace the document through CodeMirror's own view (what EditorView.findFromDOM
+  // returns), so it goes through the same update path as typing. Keyboard input
+  // isn't usable here: insertText doesn't reach CodeMirror in Firefox, synthetic
+  // paste events arrive empty there, and typing triggers XML tag auto-closing.
+  await content.evaluate((el, text) => {
+    type View = { state: { doc: { length: number } }; dispatch: (tr: object) => void };
+    const node = el as unknown as { cmTile?: { root?: { view?: View } }; cmView?: { rootView?: { view?: View } } };
+    const view = node.cmTile?.root?.view ?? node.cmView?.rootView?.view;
+    if (!view) throw new Error('CodeMirror view not found');
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+  }, svg);
   await expect(page.getByText('Manual edits — not linked to drawing.')).toBeVisible();
 }
 
@@ -25,26 +34,26 @@ async function previewSource(page: Page): Promise<string> {
   return img.evaluate(async (el: HTMLImageElement) => (await fetch(el.src)).text());
 }
 
-/** Alpha of one pixel in the left half of the preview, sampled 10 times over ~1.1s. */
-async function sampleLeftHalf(page: Page): Promise<number[]> {
-  return page.getByRole('img', { name: /Preview of/ }).locator('img').evaluate(async (el: HTMLImageElement) => {
-    // Sample only a fully decoded image, and fail loudly if the preview swaps
-    // its blob URL mid-sample (a reload would also read as "changing" pixels).
-    await el.decode();
-    const src = el.src;
-    const out: number[] = [];
-    const c = document.createElement('canvas');
-    c.width = c.height = 64;
-    const ctx = c.getContext('2d') as CanvasRenderingContext2D;
-    for (let i = 0; i < 10; i++) {
-      ctx.clearRect(0, 0, 64, 64);
-      ctx.drawImage(el, 0, 0, 64, 64);
-      out.push(ctx.getImageData(6, 32, 1, 1).data[3]);
-      await new Promise((r) => setTimeout(r, 110));
-    }
-    if (el.src !== src) throw new Error('Preview image changed while sampling');
-    return out;
-  });
+/**
+ * Distinct screenshots of the preview <img> taken over ~1s: what the user sees.
+ * (Drawing an animated SVG <img> onto a canvas returns a frozen snapshot in
+ * WebKit, so pixels read that way can't show motion in every engine.)
+ */
+async function previewScreenshots(page: Page): Promise<number> {
+  const img = page.getByRole('img', { name: /Preview of/ }).locator('img');
+  // Wait for the image to finish decoding, and fail if it is swapped mid-sample
+  // (a reload would also look like "changing" pixels).
+  await img.evaluate((el: HTMLImageElement) => el.decode());
+  const src = await img.getAttribute('src');
+  const seen = new Set<string>();
+  for (let i = 0; i < 10; i++) {
+    seen.add(createHash('sha1').update(await img.screenshot({ animations: 'allow' })).digest('hex'));
+    // Uneven gaps: a screenshot can take ~1 s (WebKit), and a fixed interval close
+    // to a multiple of the animation period would sample the same phase every time.
+    await page.waitForTimeout(40 + ((i * 137) % 290));
+  }
+  expect(await img.getAttribute('src'), 'preview image changed while sampling').toBe(src);
+  return seen.size;
 }
 
 /** Paints a vertical bar in the left columns of the 24×24 canvas. */
@@ -62,12 +71,15 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('validated animation CSS survives sanitizing and plays in the preview', async ({ page }) => {
+  const img = page.getByRole('img', { name: /Preview of/ }).locator('img');
+  const before = await img.getAttribute('src');
   await pasteIntoCodePanel(page, ANIMATED);
-  await expect.poll(() => previewSource(page)).toContain('@keyframes k');
+  await expect(img).not.toHaveAttribute('src', before ?? '');
 
-  // Sample the left half of the rendered preview over time; it must change.
-  const samples = await sampleLeftHalf(page);
-  expect(new Set(samples).size, `alpha samples ${samples.join(',')}`).toBeGreaterThan(1);
+  // Watch first, read the source after: in WebKit, fetching an animated SVG
+  // <img>'s own blob URL stops that image's animation.
+  expect(await previewScreenshots(page), 'distinct preview screenshots').toBeGreaterThan(1);
+  expect(await previewSource(page)).toContain('@keyframes k');
 });
 
 test('unsafe or unknown CSS is stripped from the preview', async ({ page }) => {
