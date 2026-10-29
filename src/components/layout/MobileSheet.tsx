@@ -3,6 +3,7 @@
 import { ChevronDown, ChevronUp, Copy, Download, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { ToolButtons } from '@/components/editor/DrawingToolbar';
+import { AnimationSettings } from '@/components/output/AnimationSettings';
 import { DocumentSettings } from '@/components/output/DocumentSettings';
 import { SvgCodeEditor } from '@/components/output/SvgCodeEditor';
 import { ContextPreview, SizeStrip, SvgPreview } from '@/components/output/SvgPreview';
@@ -112,6 +113,7 @@ export function MobileWorkspace() {
               <>
                 <SvgPreview />
                 <SizeStrip />
+                {mode === 'draw' && <AnimationSettings />}
                 {mode === 'draw' && <DocumentSettings />}
                 <ContextPreview />
               </>

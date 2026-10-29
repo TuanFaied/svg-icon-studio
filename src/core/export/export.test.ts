@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { pack } from '../grid/color';
 import { createGrid, gridsEqual } from '../grid/grid';
 import { decodeShare, encodeShare, parseProject, serializeProject } from '../project/project';
+import { defaultAnimation } from '../svg/animation';
 import { DEFAULT_SVG_OPTIONS, gridToSvg } from '../svg/generate';
 import { cssDataUri, fileStem, gridToRgba } from './encode';
 import { jsxAttrName, svgToTsx, toComponentName } from './jsx';
@@ -45,6 +46,16 @@ describe('JSX export', () => {
       expect(tsx).toContain('{...props}');
       expect(tsx).toContain('width={size}');
       expect(tsx).not.toMatch(/fill-rule|shape-rendering|fill-opacity/);
+      expect(compileErrors(tsx)).toEqual([]);
+    });
+  }
+
+  for (const kind of ['spin', 'pulse', 'fade', 'bounce'] as const) {
+    it(`produces valid TSX with a ${kind} animation`, () => {
+      const svg = gridToSvg(sample(), { ...DEFAULT_SVG_OPTIONS, format: 'minimal', animation: defaultAnimation(kind) });
+      const tsx = svgToTsx(svg, { componentName: 'LoaderIcon', defaultSize: 24 });
+      expect(tsx).toMatch(/<style>\s*\{".*@keyframes sis-[0-9a-f]{6}-/);
+      expect(tsx).toContain('className="sis-');
       expect(compileErrors(tsx)).toEqual([]);
     });
   }
@@ -102,6 +113,19 @@ describe('project files and share links', () => {
     expect(p.palette).toEqual([pack(1, 2, 3)]);
     expect(p.svg.geometry).toBe('paths');
     expect(p.name).toBe('Test');
+  });
+
+  it('round-trips animation settings and normalizes tampered ones', () => {
+    const anim = defaultAnimation('bounce');
+    const json = serializeProject({ name: 'Anim', grid: sample(), palette: [], svg: { ...DEFAULT_SVG_OPTIONS, animation: anim } });
+    expect(parseProject(json).svg.animation).toEqual(anim);
+    const tampered = JSON.parse(json);
+    tampered.settings.animation = { kind: 'spin', duration: '1s}*{color:red', easing: 'url(x)' };
+    const a = parseProject(JSON.stringify(tampered)).svg.animation;
+    expect(a.kind).toBe('spin');
+    expect(a.kind !== 'none' && [a.duration, a.easing]).toEqual([1.2, 'steps']);
+    delete tampered.settings.animation;
+    expect(parseProject(JSON.stringify(tampered)).svg.animation).toEqual({ kind: 'none' });
   });
 
   it('rejects invalid files', () => {

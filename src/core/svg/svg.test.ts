@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { pack } from '../grid/color';
 import { createGrid, type Grid, gridsEqual } from '../grid/grid';
+import { checkAnimationCss } from '../sanitize/animationCss';
+import { ANIMATION_KINDS, defaultAnimation } from './animation';
 import { DEFAULT_SVG_OPTIONS, type Geometry, gridToSvg, type SvgOptions } from './generate';
 import { optimizeSvg } from './optimize';
 import { svgToGrid } from './parse';
@@ -166,5 +168,49 @@ describe('svg document options', () => {
     g.data.fill(pack(0, 0, 0));
     expect(gridToSvg(g, opts('cells', { cornerRadius: 0.25 }))).toContain('rx="0.25"');
     expect(gridToSvg(g, opts('rects', { cornerRadius: 0.25 }))).not.toContain('rx=');
+  });
+});
+
+describe('animation presets in generated SVG', () => {
+  const styleOf = (svg: string) => svg.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
+  const ACTIVE = ANIMATION_KINDS.filter((k) => k !== 'none');
+
+  for (const kind of ACTIVE) {
+    it(`${kind}: round-trips for every geometry and format, with valid CSS`, () => {
+      const rnd = mulberry32(kind.length * 97);
+      for (const geometry of GEOMETRIES) {
+        for (const format of ['readable', 'minimal', 'optimized'] as const) {
+          const g = blockyGrid(12, 10, rnd);
+          const raw = gridToSvg(g, opts(geometry, { format, animation: defaultAnimation(kind), includeBackground: true, background: pack(1, 2, 3) }));
+          const svg = format === 'optimized' ? optimizeSvg(raw) : raw;
+          const label = `${geometry}/${format}\n${svg}`;
+          expect(gridsEqual(svgToGrid(svg, { skipBackground: true }), g), label).toBe(true);
+          const css = styleOf(svg);
+          expect(css, label).toContain('@keyframes');
+          expect(css, label).toContain('prefers-reduced-motion');
+          expect(checkAnimationCss(css), label).toEqual({ ok: true });
+          const cls = css.match(/\.(sis-[0-9a-f]{6})\{/)?.[1];
+          expect(svg, label).toContain(`<g class="${cls}">`);
+        }
+      }
+    });
+  }
+
+  it('keeps the background outside the animated group', () => {
+    const g = createGrid(3, 3);
+    g.data[4] = pack(0, 0, 0);
+    const svg = gridToSvg(g, opts('rects', { format: 'minimal', animation: defaultAnimation('spin'), includeBackground: true, background: pack(9, 9, 9) }));
+    expect(svg.indexOf('fill="#090909"')).toBeLessThan(svg.indexOf('<g class='));
+  });
+
+  it('emits no style or group when animation is off or the canvas is empty', () => {
+    const g = createGrid(3, 3);
+    const empty = gridToSvg(g, opts('rects', { animation: defaultAnimation('spin') }));
+    expect(empty).not.toContain('<g class');
+    expect(empty).not.toContain('<style');
+    g.data[0] = pack(0, 0, 0);
+    const still = gridToSvg(g, opts('rects'));
+    expect(still).not.toContain('<style');
+    expect(still).not.toContain('class=');
   });
 });

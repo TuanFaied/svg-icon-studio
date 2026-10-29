@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
-import { openApp } from './helpers';
+import { readFile } from 'node:fs/promises';
+import { cellCenter, openApp } from './helpers';
 
 // Left half filled; a stepped 180° spin moves it to the right half and back.
 const ANIMATED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" width="64" height="64">
@@ -24,6 +25,38 @@ async function previewSource(page: Page): Promise<string> {
   return img.evaluate(async (el: HTMLImageElement) => (await fetch(el.src)).text());
 }
 
+/** Alpha of one pixel in the left half of the preview, sampled 10 times over ~1.1s. */
+async function sampleLeftHalf(page: Page): Promise<number[]> {
+  return page.getByRole('img', { name: /Preview of/ }).locator('img').evaluate(async (el: HTMLImageElement) => {
+    // Sample only a fully decoded image, and fail loudly if the preview swaps
+    // its blob URL mid-sample (a reload would also read as "changing" pixels).
+    await el.decode();
+    const src = el.src;
+    const out: number[] = [];
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d') as CanvasRenderingContext2D;
+    for (let i = 0; i < 10; i++) {
+      ctx.clearRect(0, 0, 64, 64);
+      ctx.drawImage(el, 0, 0, 64, 64);
+      out.push(ctx.getImageData(6, 32, 1, 1).data[3]);
+      await new Promise((r) => setTimeout(r, 110));
+    }
+    if (el.src !== src) throw new Error('Preview image changed while sampling');
+    return out;
+  });
+}
+
+/** Paints a vertical bar in the left columns of the 24×24 canvas. */
+async function drawLeftBar(page: Page) {
+  const a = await cellCenter(page, 2, 3);
+  const b = await cellCenter(page, 2, 20);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 4 });
+  await page.mouse.up();
+}
+
 test.beforeEach(async ({ page }) => {
   await openApp(page);
 });
@@ -33,19 +66,7 @@ test('validated animation CSS survives sanitizing and plays in the preview', asy
   await expect.poll(() => previewSource(page)).toContain('@keyframes k');
 
   // Sample the left half of the rendered preview over time; it must change.
-  const samples = await page.getByRole('img', { name: /Preview of/ }).locator('img').evaluate(async (el: HTMLImageElement) => {
-    const out: number[] = [];
-    const c = document.createElement('canvas');
-    c.width = c.height = 64;
-    const ctx = c.getContext('2d') as CanvasRenderingContext2D;
-    for (let i = 0; i < 10; i++) {
-      ctx.clearRect(0, 0, 64, 64);
-      ctx.drawImage(el, 0, 0, 64, 64);
-      out.push(ctx.getImageData(8, 32, 1, 1).data[3]);
-      await new Promise((r) => setTimeout(r, 110));
-    }
-    return out;
-  });
+  const samples = await sampleLeftHalf(page);
   expect(new Set(samples).size, `alpha samples ${samples.join(',')}`).toBeGreaterThan(1);
 });
 
@@ -54,4 +75,73 @@ test('unsafe or unknown CSS is stripped from the preview', async ({ page }) => {
   await pasteIntoCodePanel(page, bad);
   await expect.poll(() => previewSource(page)).not.toContain('<style');
   expect(await previewSource(page)).toContain('<rect');
+});
+
+/**
+ * Mounts the sanitized preview SVG inline and reports the CSS animation on its
+ * animated element: the keyframes name in effect and whether time advances.
+ */
+async function previewAnimationState(page: Page): Promise<{ name: string; advancing: boolean }> {
+  const svg = await previewSource(page);
+  return page.evaluate(async (markup) => {
+    const host = document.createElement('div');
+    host.innerHTML = markup;
+    document.body.appendChild(host);
+    try {
+      const el = host.querySelector('[class^="sis-"]');
+      if (!el) return { name: 'missing', advancing: false };
+      const name = getComputedStyle(el).animationName;
+      const anim = el.getAnimations()[0];
+      if (!anim) return { name, advancing: false };
+      const t0 = Number(anim.currentTime);
+      await new Promise((r) => setTimeout(r, 200));
+      return { name, advancing: Number(anim.currentTime) > t0 && anim.playState === 'running' };
+    } finally {
+      host.remove();
+    }
+  }, svg);
+}
+
+test.describe('animation presets', () => {
+  test('spin preset animates the preview and is in the downloaded SVG', async ({ page }) => {
+    await drawLeftBar(page);
+    await page.getByLabel('Preset', { exact: true }).selectOption('spin');
+    await expect(page.getByLabel('Easing')).toHaveValue('steps');
+    await expect.poll(() => previewSource(page)).toMatch(/@keyframes sis-[0-9a-f]{6}-spin/);
+
+    expect(await previewAnimationState(page)).toEqual({ name: expect.stringMatching(/^sis-[0-9a-f]{6}-spin$/), advancing: true });
+
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export' });
+    for (const format of ['Readable', 'Minimal', 'Optimized (SVGO)']) {
+      await dialog.getByLabel('Format').selectOption({ label: format });
+      const [dl] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('button', { name: 'Download SVG' }).click()]);
+      const svg = await readFile(await dl.path(), 'utf8');
+      expect(svg, format).toMatch(/@keyframes sis-[0-9a-f]{6}-spin/);
+      expect(svg, format).toContain('prefers-reduced-motion');
+      // SVGO may fold a single-child group and move the class onto the shape.
+      expect(svg, format).toMatch(/class="sis-[0-9a-f]{6}"/);
+    }
+    await dialog.getByRole('button', { name: 'PNG' }).click();
+    await expect(dialog.getByText('animation not included (first frame)')).toBeVisible();
+  });
+
+  test('each preset plays; turning it off removes the stylesheet', async ({ page }) => {
+    await drawLeftBar(page);
+    for (const kind of ['pulse', 'fade', 'bounce']) {
+      await page.getByLabel('Preset', { exact: true }).selectOption(kind);
+      await expect.poll(() => previewSource(page)).toContain(`-${kind}{`);
+      expect(await previewAnimationState(page), kind).toEqual({ name: expect.stringMatching(new RegExp(`-${kind}$`)), advancing: true });
+    }
+    await page.getByLabel('Preset', { exact: true }).selectOption('none');
+    await expect.poll(() => previewSource(page)).not.toContain('<style');
+  });
+
+  test('reduced motion keeps the preview still', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await drawLeftBar(page);
+    await page.getByLabel('Preset', { exact: true }).selectOption('spin');
+    await expect.poll(() => previewSource(page)).toContain('-spin{');
+    expect(await previewAnimationState(page)).toEqual({ name: 'none', advancing: false });
+  });
 });

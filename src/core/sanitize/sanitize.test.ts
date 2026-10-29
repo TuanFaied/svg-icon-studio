@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import { pack } from '../grid/color';
+import { createGrid } from '../grid/grid';
+import { defaultAnimation } from '../svg/animation';
+import { DEFAULT_SVG_OPTIONS, gridToSvg } from '../svg/generate';
+import { optimizeSvg } from '../svg/optimize';
 import { createSanitizer, validateSvg } from './sanitize';
 
 const sanitize = createSanitizer(window);
@@ -33,6 +38,22 @@ describe('sanitizer', () => {
     expect(out).not.toMatch(/evil\.example/);
     // DOMPurify drops <use> entirely, which is stricter than needed but safe.
     expect(out).toContain('url(#g)');
+  });
+
+  it('keeps every generated animation preset intact', () => {
+    const g = createGrid(4, 4);
+    g.data[5] = pack(0, 0, 0);
+    for (const kind of ['spin', 'pulse', 'fade', 'bounce'] as const) {
+      for (const format of ['readable', 'minimal', 'optimized'] as const) {
+        const raw = gridToSvg(g, { ...DEFAULT_SVG_OPTIONS, format, animation: defaultAnimation(kind) });
+        const svg = format === 'optimized' ? optimizeSvg(raw) : raw;
+        const style = svg.match(/<style>([\s\S]*?)<\/style>/)?.[1];
+        const out = sanitize(svg, { allowAnimationCss: true });
+        expect(style, `${kind}/${format}`).toBeTruthy();
+        expect(out, `${kind}/${format}`).toContain(`<style>${style}</style>`);
+        expect(out, `${kind}/${format}`).toMatch(/class="sis-[0-9a-f]{6}"/);
+      }
+    }
   });
 
   it('keeps the attributes this app generates', () => {

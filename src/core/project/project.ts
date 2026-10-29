@@ -1,6 +1,7 @@
 import { deflateSync, inflateSync } from 'fflate';
 import { type PackedColor, parseHex, toHex } from '../grid/color';
 import { clampSize, type Grid, MAX_SIZE } from '../grid/grid';
+import { normalizeAnimation } from '../svg/animation';
 import { DEFAULT_SVG_OPTIONS, type Geometry, type SvgOptions } from '../svg/generate';
 
 export const PROJECT_VERSION = 1;
@@ -97,6 +98,8 @@ export function parseProject(json: string): Project {
     .filter((c): c is number => c !== null && c !== 0);
   const s = { ...DEFAULT_SVG_OPTIONS, ...(f.settings ?? {}) };
   if (!GEOMETRIES.includes(s.geometry)) s.geometry = 'rects';
+  // Untrusted input: rebuild the animation from clamped numbers and known enums.
+  s.animation = normalizeAnimation(s.animation);
   return {
     name: typeof f.name === 'string' && f.name.trim() ? f.name.slice(0, 80) : 'Untitled icon',
     grid: { width: clampSize(width), height: clampSize(height), data },

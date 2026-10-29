@@ -54,9 +54,13 @@ export async function gridToPng(g: Grid, scale: number, background: PackedColor 
   return canvasToBlob(canvas);
 }
 
-/** Rasterizes arbitrary (sanitized) SVG at a target size, used for manual edits and odd sizes. */
+/**
+ * Rasterizes arbitrary (sanitized) SVG at a target size, used for manual edits and odd sizes.
+ * Animation CSS is stripped first, so the PNG is the static first frame rather than
+ * whatever moment the animation happened to be at.
+ */
 export async function svgToPng(svg: string, width: number, height: number, background: string | null, smoothing: boolean): Promise<Blob> {
-  const url = URL.createObjectURL(new Blob([sanitizeSvg(svg, { allowAnimationCss: true })], { type: 'image/svg+xml' }));
+  const url = URL.createObjectURL(new Blob([sanitizeSvg(svg)], { type: 'image/svg+xml' }));
   try {
     const img = new Image();
     img.decoding = 'async';

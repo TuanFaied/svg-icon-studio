@@ -56,6 +56,7 @@ Deploy by uploading `out/` to any static host.
 - Geometry: merged rectangles (greedy meshing, default), outline paths (`M/h/v/z`, `fill-rule="evenodd"`, one path per color), or individual cells (optional rounded corners).
 - Formats: readable, minimal, optimized (SVGO with geometry-safe settings).
 - Options: width/height or viewBox only, title + `role="img"` or `aria-hidden`, `currentColor` for single-color icons, background rect, `shape-rendering="crispEdges"`.
+- Animation presets: **spin** (with stepped timing for crisp pixel spinners), **pulse**, **fade** and **bounce**, with duration, easing (stepped, linear, ease in-out), direction, play count and delay. They are exported as CSS `@keyframes` in a `<style>` inside the SVG, applied to one group wrapping the shapes (the background stays still). Class names get a short hash prefix (`sis-xxxxxx`) so several inline icons don't collide. A `prefers-reduced-motion` rule stops the motion. Works in readable, minimal and SVGO output and in the React component. PNG and favicon PNGs show the first frame.
 - Code panel (CodeMirror 6): read-only by default; **Edit** forks the code with a “Manual edits — not linked to drawing” banner, live DOMParser validation, and **Regenerate from drawing** / **Keep edits**. Footer shows bytes, gzip size and element count.
 - Preview is an `<img>` from a sanitized blob URL, with checker/light/dark/custom backgrounds, a 16–128px size strip, and in-context mocks (tab favicon, nav bar, buttons).
 
@@ -101,8 +102,8 @@ Key decisions:
 
 ## Tests
 
-- Unit (Vitest, 92 tests): drawing algorithms in all octants, flood fill edges/holes/connectivity, move, resize with all nine anchors, undo grouping/redo clearing/cap, SVG round trip, empty canvas, `currentColor`, alpha, sanitizer (scripts, handlers, `javascript:`, external refs), JSX output compiled with the TypeScript compiler, project files, share links, conversion helpers.
-- End-to-end (Playwright, 9 tests): gap-free fast drags, keyboard undo/redo, shortcuts paused in text fields, SVG + PNG download with PNG pixels compared to the grid at 1×, transparent PNG trace, large photo (downscaled, UI stays responsive, size warning), renamed `.txt` rejection, pixel-art import, touch drawing on a phone viewport without page scroll. Every e2e test also fails on any console error.
+- Unit (Vitest, 157 tests): drawing algorithms in all octants, flood fill edges/holes/connectivity, move, resize with all nine anchors, undo grouping/redo clearing/cap, SVG round trip (also with every animation preset, in every geometry and format), empty canvas, `currentColor`, alpha, sanitizer (scripts, handlers, `javascript:`, external refs, animation CSS validator), JSX output compiled with the TypeScript compiler (with and without animation), project files (including tampered animation settings), share links, conversion helpers.
+- End-to-end (Playwright, 14 tests): gap-free fast drags, keyboard undo/redo, shortcuts paused in text fields, SVG + PNG download with PNG pixels compared to the grid at 1×, transparent PNG trace, large photo (downscaled, UI stays responsive, size warning), renamed `.txt` rejection, pixel-art import, touch drawing on a phone viewport without page scroll, animation CSS kept in the preview while unsafe CSS is stripped, each animation preset running from the UI and present in all three SVG download formats, and reduced motion stopping it. Every e2e test also fails on any console error.
 - The `?e2e` URL flag exposes a read-only `window.__SIS__` snapshot for these tests.
 
 ## Known limitations
@@ -115,4 +116,4 @@ Key decisions:
 - DOMPurify’s SVG profile strips `<use>` entirely, so hand-edited SVGs that rely on `<use href="#id">` lose those references in previews and PNG exports.
 - Icons using `currentColor` show as black inside `<img>`; the previews draw them through a CSS mask so they take the surrounding text color.
 - Lighthouse has not been run as part of this build; accessibility work includes labelled icon buttons, tooltips with shortcuts, focus rings, native `<dialog>`, ARIA radio groups/switches, reduced-motion support and both themes, but the ≥95 score is not yet verified.
-- Not built (Phase 4 ideas): icon sets / sprites, animation frames, layers, stroke-icon mode, templates, Vue/Svelte export, ML background removal, PWA/offline.
+- Not built (Phase 4 ideas): icon sets / sprites, frame-by-frame animation (tracked in #5), layers, stroke-icon mode, templates, Vue/Svelte export, ML background removal, PWA/offline.
