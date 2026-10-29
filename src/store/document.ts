@@ -9,10 +9,21 @@ import { applyPatches, PatchRecorder, type PixelPatch } from '@/core/history/pat
 import { DEFAULT_SVG_OPTIONS, type SvgOptions } from '@/core/svg/generate';
 import type { Project } from '@/core/project/project';
 
+/** Everything a template (or any whole-document swap) replaces, for one undo step. */
+export interface DocumentSnapshot {
+  id: string;
+  name: string;
+  grid: Grid;
+  palette: PackedColor[];
+  svg: SvgOptions;
+  manualSvg: string | null;
+}
+
 export type HistoryEntry =
   | { kind: 'pixels'; label: string; patches: PixelPatch[] }
   | { kind: 'grid'; label: string; before: Grid; after: Grid }
-  | { kind: 'palette'; label: string; before: PackedColor[]; after: PackedColor[] };
+  | { kind: 'palette'; label: string; before: PackedColor[]; after: PackedColor[] }
+  | { kind: 'document'; label: string; before: DocumentSnapshot; after: DocumentSnapshot };
 
 const history = new History<HistoryEntry>();
 
@@ -46,6 +57,12 @@ export interface DocumentState {
   redo: () => void;
   loadProject: (p: Project, id?: string) => void;
   newProject: (width?: number, height?: number) => void;
+  /**
+   * Swaps in a whole new document (e.g. a template) as one undoable step. It gets
+   * a fresh project id, so the previous project keeps its own autosave / Recent
+   * entry; undo restores the previous id too.
+   */
+  replaceDocument: (next: Omit<DocumentSnapshot, 'id' | 'manualSvg'>, label: string) => void;
 }
 
 const newId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now()));
@@ -73,8 +90,27 @@ export const useDocument = create<DocumentState>()((set, get) => {
       case 'palette':
         set({ palette: [...(dir === 'undo' ? e.before : e.after)] });
         break;
+      case 'document':
+        restoreSnapshot(dir === 'undo' ? e.before : e.after);
+        break;
     }
   };
+
+  const snapshot = (): DocumentSnapshot => {
+    const s = get();
+    return { id: s.id, name: s.name, grid: cloneGrid(s.grid), palette: [...s.palette], svg: { ...s.svg }, manualSvg: s.manualSvg };
+  };
+
+  const restoreSnapshot = (d: DocumentSnapshot) =>
+    set((s) => ({
+      id: d.id,
+      name: d.name,
+      grid: cloneGrid(d.grid),
+      palette: [...d.palette],
+      svg: { ...d.svg },
+      manualSvg: d.manualSvg,
+      version: s.version + 1,
+    }));
 
   return {
     id: newId(),
@@ -154,6 +190,21 @@ export const useDocument = create<DocumentState>()((set, get) => {
         manualSvg: null,
         version: s.version + 1,
       }));
+      syncHistory();
+    },
+
+    replaceDocument: (next, label) => {
+      const before = snapshot();
+      const after: DocumentSnapshot = {
+        id: newId(),
+        name: next.name,
+        grid: cloneGrid(next.grid),
+        palette: [...next.palette],
+        svg: { ...next.svg },
+        manualSvg: null,
+      };
+      history.push({ kind: 'document', label, before, after });
+      restoreSnapshot(after);
       syncHistory();
     },
 
