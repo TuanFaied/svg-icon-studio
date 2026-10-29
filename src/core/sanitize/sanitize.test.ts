@@ -43,7 +43,7 @@ describe('sanitizer', () => {
   it('keeps every generated animation preset intact', () => {
     const g = createGrid(4, 4);
     g.data[5] = pack(0, 0, 0);
-    for (const kind of ['spin', 'pulse', 'fade', 'bounce'] as const) {
+    for (const kind of ['spin', 'pulse', 'fade', 'bounce', 'sequence'] as const) {
       for (const format of ['readable', 'minimal', 'optimized'] as const) {
         const raw = gridToSvg(g, { ...DEFAULT_SVG_OPTIONS, format, animation: defaultAnimation(kind) });
         const svg = format === 'optimized' ? optimizeSvg(raw) : raw;
@@ -51,7 +51,7 @@ describe('sanitizer', () => {
         const out = sanitize(svg, { allowAnimationCss: true });
         expect(style, `${kind}/${format}`).toBeTruthy();
         expect(out, `${kind}/${format}`).toContain(`<style>${style}</style>`);
-        expect(out, `${kind}/${format}`).toMatch(/class="sis-[0-9a-f]{6}"/);
+        expect(out, `${kind}/${format}`).toMatch(/class="sis-[0-9a-f]{6}[ "]/);
       }
     }
   });

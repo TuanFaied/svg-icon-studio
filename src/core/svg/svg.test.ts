@@ -190,7 +190,12 @@ describe('animation presets in generated SVG', () => {
           expect(css, label).toContain('prefers-reduced-motion');
           expect(checkAnimationCss(css), label).toEqual({ ok: true });
           const cls = css.match(/\.(sis-[0-9a-f]{6})\{/)?.[1];
-          expect(svg, label).toContain(`<g class="${cls}">`);
+          if (kind === 'sequence') {
+            // One class pair per animated color; SVGO may put it on the shape itself.
+            expect(svg, label).toContain(`class="${cls} ${cls}-s0"`);
+          } else {
+            expect(svg, label).toContain(`<g class="${cls}">`);
+          }
         }
       }
     });

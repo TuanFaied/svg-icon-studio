@@ -50,7 +50,7 @@ describe('JSX export', () => {
     });
   }
 
-  for (const kind of ['spin', 'pulse', 'fade', 'bounce'] as const) {
+  for (const kind of ['spin', 'pulse', 'fade', 'bounce', 'sequence'] as const) {
     it(`produces valid TSX with a ${kind} animation`, () => {
       const svg = gridToSvg(sample(), { ...DEFAULT_SVG_OPTIONS, format: 'minimal', animation: defaultAnimation(kind) });
       const tsx = svgToTsx(svg, { componentName: 'LoaderIcon', defaultSize: 24 });
