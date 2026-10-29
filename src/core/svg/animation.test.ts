@@ -3,7 +3,7 @@ import { pack } from '../grid/color';
 import { createGrid } from '../grid/grid';
 import { checkAnimationCss } from '../sanitize/animationCss';
 import {
-  type ActiveAnimation, ANIMATION_KINDS, animationCss, animationPrefix, defaultAnimation, LIMITS, NO_ANIMATION, normalizeAnimation,
+  type ActiveAnimation, ANIMATION_KINDS, animationCss, animationPrefix, defaultAnimation, LIMITS, NO_ANIMATION, normalizeAnimation, sequenceRanks,
 } from './animation';
 
 const ACTIVE = ANIMATION_KINDS.filter((k) => k !== 'none').map((k) => defaultAnimation(k) as ActiveAnimation);
@@ -90,5 +90,72 @@ describe('class prefix', () => {
     expect(animationPrefix(a, spin)).toMatch(/^sis-[0-9a-f]{6}$/);
     expect(animationPrefix(a, spin)).not.toBe(animationPrefix(b, spin));
     expect(animationPrefix(a, spin)).not.toBe(animationPrefix(a, defaultAnimation('fade')));
+  });
+});
+
+describe('sequence by color', () => {
+  // 8 dots around a 9×9 ring, one shade each, plus a static center.
+  const DOTS: Array<[number, number]> = [[4, 0], [7, 1], [8, 4], [7, 7], [4, 8], [1, 7], [0, 4], [1, 1]];
+  function ring() {
+    const g = createGrid(9, 9);
+    DOTS.forEach(([x, y], i) => (g.data[y * 9 + x] = pack(10 + i * 20, 0, 0)));
+    g.data[4 * 9 + 4] = pack(0, 0, 255);
+    return g;
+  }
+  const shade = (i: number) => pack(10 + i * 20, 0, 0);
+  const rankList = (m: Map<number, number>) => [...m.entries()].sort((a, b) => a[1] - b[1]).map(([c]) => c);
+
+  it('orders clockwise from 12 o’clock', () => {
+    const ranks = sequenceRanks(ring(), 'clockwise', pack(0, 0, 255));
+    expect(rankList(ranks)).toEqual(DOTS.map((_, i) => shade(i)));
+  });
+
+  it('orders counter-clockwise from 12 o’clock', () => {
+    const ranks = sequenceRanks(ring(), 'counterclockwise', pack(0, 0, 255));
+    expect(rankList(ranks)).toEqual([0, 7, 6, 5, 4, 3, 2, 1].map(shade));
+  });
+
+  it('drawing order follows first appearance (row-major)', () => {
+    const ranks = sequenceRanks(ring(), 'appearance', null);
+    // Row 0: dot 0; row 1: dots 7 then 1; row 4: dot 6, center, dot 2; row 7: dots 5, 3; row 8: dot 4.
+    expect(rankList(ranks)).toEqual([shade(0), shade(7), shade(1), shade(6), pack(0, 0, 255), shade(2), shade(5), shade(3), shade(4)]);
+  });
+
+  it('leaves the base color out', () => {
+    const ranks = sequenceRanks(ring(), 'clockwise', pack(0, 0, 255));
+    expect(ranks.size).toBe(8);
+    expect(ranks.has(pack(0, 0, 255))).toBe(false);
+  });
+
+  it('spaces step delays evenly over one cycle, offset by the user delay', () => {
+    const a = { ...(defaultAnimation('sequence') as ActiveAnimation & { kind: 'sequence' }), duration: 2, delay: 0.5 };
+    const css = animationCss('sis-a', a, 4);
+    expect(css).toContain('.sis-a-s0{animation-delay:-1.5s}');
+    expect(css).toContain('.sis-a-s1{animation-delay:-1s}');
+    expect(css).toContain('.sis-a-s3{animation-delay:0s}');
+    expect(css).toContain('transform-box:fill-box');
+    expect(checkAnimationCss(css)).toEqual({ ok: true });
+  });
+
+  it('pop effect scales each step around its own box', () => {
+    const a = { ...(defaultAnimation('sequence') as ActiveAnimation & { kind: 'sequence' }), effect: 'pop' as const, scale: 1.4 };
+    const css = animationCss('sis-a', a, 3);
+    expect(css).toContain('0%{transform:scale(1.4)}50%,100%{transform:scale(1)}');
+    expect(checkAnimationCss(css)).toEqual({ ok: true });
+  });
+
+  it('validates with many steps at the limits', () => {
+    for (const effect of ['fade', 'pop'] as const) {
+      const a = normalizeAnimation({ kind: 'sequence', effect, duration: 0.2, delay: 5, minOpacity: 0, scale: 1.6 }) as ActiveAnimation;
+      expect(checkAnimationCss(animationCss('sis-a', a, 64))).toEqual({ ok: true });
+    }
+  });
+
+  it('normalizes tampered sequence settings', () => {
+    const a = normalizeAnimation({ kind: 'sequence', effect: 'explode', order: 'random', baseColor: '#fff', minOpacity: 7 });
+    expect(a).toMatchObject({ kind: 'sequence', effect: 'fade', order: 'clockwise', baseColor: null, minOpacity: LIMITS.minOpacity[1] });
+    expect(normalizeAnimation({ kind: 'sequence', baseColor: -1 })).toMatchObject({ baseColor: null });
+    expect(normalizeAnimation({ kind: 'sequence', baseColor: 1.5 })).toMatchObject({ baseColor: null });
+    expect(normalizeAnimation({ kind: 'sequence', baseColor: 0xff0000ff })).toMatchObject({ baseColor: 0xff0000ff });
   });
 });

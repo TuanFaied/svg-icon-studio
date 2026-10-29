@@ -145,3 +145,67 @@ test.describe('animation presets', () => {
     expect(await previewAnimationState(page)).toEqual({ name: 'none', advancing: false });
   });
 });
+
+test.describe('sequence by color', () => {
+  test('dots drawn in different colors animate in turn, clockwise', async ({ page }) => {
+    // Four dots around the canvas center: top, right, bottom, left, each in its own palette color.
+    const dots: Array<[string, number, number]> = [['#ef4444', 12, 3], ['#22c55e', 21, 12], ['#3b82f6', 12, 21], ['#a855f7', 3, 12]];
+    for (const [hex, x, y] of dots) {
+      await page.getByRole('button', { name: hex, exact: true }).click();
+      const p = await cellCenter(page, x, y);
+      await page.mouse.click(p.x, p.y);
+    }
+    await page.getByLabel('Preset', { exact: true }).selectOption('sequence');
+    await expect(page.getByText('4 steps')).toBeVisible();
+    await expect.poll(() => previewSource(page)).toMatch(/-s3\{animation-delay:/);
+
+    const svg = await previewSource(page);
+    const steps = await page.evaluate(async (markup) => {
+      const host = document.createElement('div');
+      host.innerHTML = markup;
+      document.body.appendChild(host);
+      try {
+        const els = [...host.querySelectorAll('[class*="-s"]')];
+        await new Promise((r) => setTimeout(r, 100));
+        return els.map((el) => {
+          const anim = el.getAnimations()[0];
+          return {
+            fill: el.getAttribute('fill'),
+            step: Number(el.getAttribute('class')?.match(/-s(\d+)$/)?.[1]),
+            running: anim?.playState === 'running',
+            // Position in the current cycle in ms (1s default duration). currentTime ignores
+            // animation-delay; the effect's computed progress includes it.
+            phase: Math.round((anim?.effect?.getComputedTiming().progress ?? -1) * 1000),
+          };
+        });
+      } finally {
+        host.remove();
+      }
+    }, svg);
+
+    expect(steps).toHaveLength(4);
+    expect(steps.every((s) => s.running)).toBe(true);
+    const byStep = [...steps].sort((a, b) => a.step - b.step);
+    expect(byStep.map((s) => s.fill)).toEqual(['#ef4444', '#22c55e', '#3b82f6', '#a855f7']);
+    // Step k is a quarter cycle behind step k-1.
+    for (let k = 1; k < 4; k++) {
+      const gap = (byStep[k - 1].phase - byStep[k].phase + 1000) % 1000;
+      expect(Math.abs(gap - 250), `gap between steps ${k - 1} and ${k}: ${gap}ms`).toBeLessThan(40);
+    }
+  });
+
+  test('a static color stays still', async ({ page }) => {
+    for (const [hex, x] of [['#ef4444', 4], ['#3b82f6', 12], ['#22c55e', 20]] as const) {
+      await page.getByRole('button', { name: hex, exact: true }).click();
+      const p = await cellCenter(page, x, 12);
+      await page.mouse.click(p.x, p.y);
+    }
+    await page.getByLabel('Preset', { exact: true }).selectOption('sequence');
+    await page.getByLabel('Static color').selectOption({ label: '#3b82f6' });
+    await expect(page.getByText('2 steps')).toBeVisible();
+    await expect.poll(() => previewSource(page)).toContain('-s1{');
+    const src = await previewSource(page);
+    expect(src).not.toContain('-s2{');
+    expect(src).toMatch(/fill="#3b82f6"(?![^>]*class=)/);
+  });
+});

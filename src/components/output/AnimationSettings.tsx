@@ -1,7 +1,11 @@
 'use client';
 
+import { useMemo } from 'react';
+import { toHex } from '@/core/grid/color';
+import { usedColors } from '@/core/grid/grid';
 import {
-  type AnimationKind, type AnimationTiming, defaultAnimation, type Direction, type Easing, LIMITS, timingOf,
+  type AnimationKind, type AnimationTiming, defaultAnimation, type Direction, type Easing, LIMITS, type SequenceEffect,
+  type SequenceOrder, timingOf,
 } from '@/core/svg/animation';
 import { NumberField, Section, Select, Slider, Toggle } from '@/components/ui/primitives';
 import { useDocument } from '@/store/document';
@@ -12,6 +16,7 @@ const KINDS: Array<{ value: AnimationKind; label: string }> = [
   { value: 'pulse', label: 'Pulse' },
   { value: 'fade', label: 'Fade' },
   { value: 'bounce', label: 'Bounce' },
+  { value: 'sequence', label: 'Sequence by color' },
 ];
 
 const seconds = (v: number) => `${Math.round(v * 100) / 100}s`;
@@ -20,6 +25,9 @@ export function AnimationSettings() {
   const anim = useDocument((s) => s.svg.animation);
   const setSvgOptions = useDocument((s) => s.setSvgOptions);
   const timing = timingOf(anim);
+  const grid = useDocument((s) => s.grid);
+  const version = useDocument((s) => s.version);
+  const colors = useMemo(() => usedColors(grid), [grid, version]);
 
   const setTiming = (patch: Partial<AnimationTiming>) => {
     if (anim.kind === 'none') return;
@@ -66,6 +74,63 @@ export function AnimationSettings() {
               format={(v) => `${Math.round(v * 100)}%`}
               onChange={(minOpacity) => setSvgOptions({ animation: { ...anim, minOpacity } })}
             />
+          )}
+          {anim.kind === 'sequence' && (
+            <>
+              <p className="py-1 text-[11px] leading-snug text-muted">
+                Each color is one step and they light up in turn. Draw the dots of a loader in slightly different shades to set the steps.
+              </p>
+              <Select<SequenceEffect>
+                label="Effect"
+                value={anim.effect}
+                onChange={(effect) => setSvgOptions({ animation: { ...anim, effect } })}
+                options={[
+                  { value: 'fade', label: 'Fade' },
+                  { value: 'pop', label: 'Scale pop' },
+                ]}
+              />
+              <Select<SequenceOrder>
+                label="Order"
+                value={anim.order}
+                onChange={(order) => setSvgOptions({ animation: { ...anim, order } })}
+                options={[
+                  { value: 'clockwise', label: 'Clockwise' },
+                  { value: 'counterclockwise', label: 'Counter-clockwise' },
+                  { value: 'appearance', label: 'Drawing order' },
+                ]}
+              />
+              <Select<string>
+                label="Static color"
+                value={anim.baseColor !== null && colors.includes(anim.baseColor) ? String(anim.baseColor) : ''}
+                onChange={(v) => setSvgOptions({ animation: { ...anim, baseColor: v ? Number(v) : null } })}
+                options={[{ value: '', label: 'None' }, ...colors.map((c) => ({ value: String(c), label: toHex(c) }))]}
+              />
+              {anim.effect === 'fade' ? (
+                <Slider
+                  label="Fade to"
+                  value={anim.minOpacity}
+                  min={LIMITS.minOpacity[0]}
+                  max={LIMITS.minOpacity[1]}
+                  step={0.05}
+                  format={(v) => `${Math.round(v * 100)}%`}
+                  onChange={(minOpacity) => setSvgOptions({ animation: { ...anim, minOpacity } })}
+                />
+              ) : (
+                <Slider
+                  label="Pop to"
+                  value={anim.scale}
+                  min={LIMITS.scale[0]}
+                  max={LIMITS.scale[1]}
+                  step={0.01}
+                  format={(v) => `${Math.round(v * 100)}%`}
+                  onChange={(scale) => setSvgOptions({ animation: { ...anim, scale } })}
+                />
+              )}
+              <p className="text-[11px] text-muted">
+                {colors.filter((c) => c !== anim.baseColor).length} steps
+                {colors.filter((c) => c !== anim.baseColor).length < 2 && ' · use at least two colors to see a sequence'}
+              </p>
+            </>
           )}
           {anim.kind === 'bounce' && (
             <Slider

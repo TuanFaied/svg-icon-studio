@@ -1,6 +1,6 @@
 import { alpha, opacityString, type PackedColor, toHexRGB } from '../grid/color';
 import type { Grid } from '../grid/grid';
-import { type AnimationOptions, animationCss, animationPrefix, NO_ANIMATION } from './animation';
+import { type AnimationOptions, animationCss, animationPrefix, NO_ANIMATION, sequenceRanks } from './animation';
 import { type CellRect, type ColorGroups, individualCells, type Loop, mergedRects, outlineLoops } from './geometry';
 
 export type Geometry = 'rects' | 'paths' | 'cells';
@@ -136,12 +136,15 @@ export function gridToSvg(g: Grid, opts: SvgOptions): string {
 
   const shapes = shapesFor(g, opts, minimal);
   const anim = opts.animation ?? NO_ANIMATION;
-  // Nothing to move on an empty canvas, so no stylesheet either.
-  const animClass = anim.kind === 'none' || shapes.length === 0 ? null : animationPrefix(g, anim);
+  // A sequence animates each color group as one step; the base color stays still.
+  const ranks = anim.kind === 'sequence' ? sequenceRanks(g, anim.order, anim.baseColor) : null;
+  // Nothing to move (empty canvas, or only the base color): no stylesheet either.
+  const hasMotion = anim.kind !== 'none' && shapes.length > 0 && (!ranks || ranks.size > 0);
+  const animClass = hasMotion ? animationPrefix(g, anim) : null;
 
   const children: string[] = [];
   if (!opts.decorative && title) children.push(`<title>${escapeXml(title)}</title>`);
-  if (animClass && anim.kind !== 'none') children.push(`<style>${animationCss(animClass, anim)}</style>`);
+  if (animClass && anim.kind !== 'none') children.push(`<style>${animationCss(animClass, anim, ranks?.size ?? 0)}</style>`);
   if (opts.includeBackground && opts.background !== 0) {
     children.push(`<rect width="${g.width}" height="${g.height}" ${fillAttrs(opts.background, false, minimal)}/>`);
   }
@@ -150,7 +153,9 @@ export function gridToSvg(g: Grid, opts: SvgOptions): string {
   const nl = minimal ? '' : '\n';
   const body: string[] = [];
   for (const s of shapes) {
-    const fa = fillAttrs(s.color, useCurrent, minimal);
+    const rank = ranks?.get(s.color);
+    const stepClass = animClass && rank !== undefined ? ` class="${animClass} ${animClass}-s${rank}"` : '';
+    const fa = fillAttrs(s.color, useCurrent, minimal) + stepClass;
     if (minimal && s.elements.length === 1) {
       // Put the fill straight on the single element instead of wrapping it.
       body.push(s.elements[0].replace(/^<(\w+)/, `<$1 ${fa}`));
@@ -159,10 +164,11 @@ export function gridToSvg(g: Grid, opts: SvgOptions): string {
     }
   }
 
-  // Animated icons move as one group. Body items carry their own inner
-  // indentation for depth 1, so each line shifts one level deeper here.
+  // Whole-icon presets move as one group (sequences animate per color instead).
+  // Body items carry their own inner indentation for depth 1, so each line
+  // shifts one level deeper here.
   const nest = (item: string) => item.split('\n').map((line, i) => (i === 0 ? indent + indent : indent) + line).join('\n');
-  const shapesOut = animClass ? [`<g class="${animClass}">${nl}${body.map(nest).join(nl)}${nl}${indent}</g>`] : body;
+  const shapesOut = animClass && !ranks ? [`<g class="${animClass}">${nl}${body.map(nest).join(nl)}${nl}${indent}</g>`] : body;
 
   const inner = [...children, ...shapesOut].map((l) => indent + l).join(nl);
   return `<svg ${root.join(' ')}>${nl}${inner}${inner ? nl : ''}</svg>${minimal ? '' : '\n'}`;
