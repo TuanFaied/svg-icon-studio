@@ -1,5 +1,7 @@
 # SVG Icon Studio
 
+[![CI](https://github.com/TuanFaied/svg-icon-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/TuanFaied/svg-icon-studio/actions/workflows/ci.yml)
+
 A client-side web app for making SVG icons two ways:
 
 1. **Draw** icons on a pixel grid and export clean SVG.
@@ -28,6 +30,17 @@ npm run dev        # http://localhost:3000
 | `npm run test:e2e` | Builds, then runs Playwright (desktop + Pixel 7 projects). First run: `npx playwright install chromium` |
 
 Deploy by uploading `out/` to any static host.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`:
+
+| Check | Steps |
+|---|---|
+| **Typecheck, unit tests, build** | `npm ci`, `npm run typecheck`, `npm test`, `npm run build` |
+| **End-to-end tests** | `npm ci`, install Playwright Chromium, `npm run build`, `npx playwright test` (Playwright traces are uploaded when it fails) |
+
+`main` is protected: changes land through pull requests, and both checks must pass before merging.
 
 ## Features
 
