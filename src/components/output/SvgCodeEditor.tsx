@@ -13,7 +13,7 @@ import { validateSvg } from '@/core/sanitize/sanitize';
 import { formatBytes, gzipSize, svgStats } from '@/core/svg/stats';
 import { Button } from '@/components/ui/primitives';
 import { copyText } from '@/lib/files';
-import { useActiveSvg } from '@/lib/svgOutput';
+import { useActiveSvg, useSettledSvg } from '@/lib/svgOutput';
 import { useDocument } from '@/store/document';
 import { useUi } from '@/store/ui';
 
@@ -46,7 +46,11 @@ export function SvgCodeEditor() {
   const view = useRef<EditorView | null>(null);
   const readOnly = useRef(new Compartment());
   const highlight = useRef(new Compartment());
-  const { svg, source } = useActiveSvg();
+  const active = useActiveSvg();
+  const source = active.source;
+  // Manual edits come straight from the editor; generated output settles first when large.
+  const settled = useSettledSvg(active.svg);
+  const svg = source === 'manual' ? active.svg : settled;
   const manual = source === 'manual';
   const setManual = useDocument((s) => s.setManualSvg);
   const version = useDocument((s) => s.version);

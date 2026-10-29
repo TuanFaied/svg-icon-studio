@@ -78,3 +78,18 @@ export function contentBounds(g: Grid): { x: number; y: number; w: number; h: nu
   }
   return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
+
+/** Distinct colors across several grids (e.g. animation frames), in first-appearance order. */
+export function usedColorsAll(grids: readonly Grid[]): PackedColor[] {
+  const seen = new Set<PackedColor>();
+  const out: PackedColor[] = [];
+  for (const g of grids) {
+    for (const c of usedColors(g)) {
+      if (!seen.has(c)) {
+        seen.add(c);
+        out.push(c);
+      }
+    }
+  }
+  return out;
+}

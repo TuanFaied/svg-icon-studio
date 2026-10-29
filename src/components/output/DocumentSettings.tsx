@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { toHex } from '@/core/grid/color';
-import { canUseCurrentColor, type Geometry, type OutputFormat } from '@/core/svg/generate';
+import { canUseCurrentColorAll, type Geometry, type OutputFormat } from '@/core/svg/generate';
 import { NumberField, Section, Segmented, Select, Slider, Toggle } from '@/components/ui/primitives';
 import { parseHex } from '@/core/grid/color';
 import { useDocument } from '@/store/document';
@@ -10,9 +10,9 @@ import { useDocument } from '@/store/document';
 export function DocumentSettings() {
   const svg = useDocument((s) => s.svg);
   const set = useDocument((s) => s.setSvgOptions);
-  const grid = useDocument((s) => s.grid);
+  const frames = useDocument((s) => s.frames);
   const version = useDocument((s) => s.version);
-  const singleColor = useMemo(() => canUseCurrentColor(grid), [grid, version]);
+  const singleColor = useMemo(() => canUseCurrentColorAll(frames.map((f) => f.grid)), [frames, version]);
 
   return (
     <Section title="Document">

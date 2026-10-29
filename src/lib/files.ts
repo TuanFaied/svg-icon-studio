@@ -54,6 +54,16 @@ export async function gridToPng(g: Grid, scale: number, background: PackedColor 
   return canvasToBlob(canvas);
 }
 
+/** PNG from raw RGBA (e.g. a sprite sheet). */
+export async function rgbaToPng(width: number, height: number, data: Uint8ClampedArray): Promise<Blob> {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(data), width, height), 0, 0);
+  return canvasToBlob(canvas);
+}
+
 /**
  * Rasterizes arbitrary (sanitized) SVG at a target size, used for manual edits and odd sizes.
  * Animation CSS is stripped first, so the PNG is the static first frame rather than

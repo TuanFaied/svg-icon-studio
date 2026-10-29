@@ -15,8 +15,17 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } }, testIgnore: /mobile/ },
+    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } }, testIgnore: /mobile/, grepInvert: /@perf/ },
     { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /mobile/ },
+    // Timing-sensitive stress tests run alone, after everything else, so they
+    // neither starve other tests nor measure CPU contention instead of the app.
+    {
+      name: 'perf',
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+      grep: /@perf/,
+      dependencies: ['desktop', 'mobile'],
+      fullyParallel: false,
+    },
   ],
   webServer: {
     command: `node scripts/serve.mjs out ${PORT}`,

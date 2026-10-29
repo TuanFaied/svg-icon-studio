@@ -1,25 +1,28 @@
 'use client';
 
-import { Braces, Copy, Download, FileCode2, FileJson, Image as ImageIcon, Link2, Package, Quote } from 'lucide-react';
+import { Braces, Copy, Download, FileCode2, FileJson, Film, Image as ImageIcon, Link2, Package, Quote } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { parseHex } from '@/core/grid/color';
-import { cssDataUri, fileStem } from '@/core/export/encode';
+import { totalDuration } from '@/core/frames/frames';
+import { cssDataUri, fileStem, gridsToSheet } from '@/core/export/encode';
 import { svgToTsx, toComponentName } from '@/core/export/jsx';
 import { encodeShare, SHARE_MAX, serializeProject } from '@/core/project/project';
 import { type OutputFormat } from '@/core/svg/generate';
 import { formatBytes } from '@/core/svg/stats';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button, cx, NumberField, Segmented, Select } from '@/components/ui/primitives';
-import { blobBytes, copyText, downloadBlob, downloadText, gridToPng, makeZip, svgToPng } from '@/lib/files';
+import { blobBytes, copyText, downloadBlob, downloadText, gridToPng, makeZip, rgbaToPng, svgToPng } from '@/lib/files';
+import { encodeGif } from '@/lib/gifClient';
 import { renderSvg, useActiveSvg, useSvgBlobUrl } from '@/lib/svgOutput';
 import { currentProject, useDocument } from '@/store/document';
 import { useUi } from '@/store/ui';
 
-type Target = 'svg' | 'png' | 'react' | 'datauri' | 'favicon' | 'project';
+type Target = 'svg' | 'png' | 'gif' | 'react' | 'datauri' | 'favicon' | 'project';
 
 const TARGETS: Array<{ id: Target; label: string; icon: ReactNode }> = [
   { id: 'svg', label: 'SVG file', icon: <FileCode2 size={15} /> },
   { id: 'png', label: 'PNG', icon: <ImageIcon size={15} /> },
+  { id: 'gif', label: 'Animated GIF', icon: <Film size={15} /> },
   { id: 'react', label: 'React component', icon: <Braces size={15} /> },
   { id: 'datauri', label: 'Data URI', icon: <Quote size={15} /> },
   { id: 'favicon', label: 'Favicon pack', icon: <Package size={15} /> },
@@ -51,28 +54,33 @@ export function ExportDialog() {
 
 function ExportBody() {
   const [target, setTarget] = useState<Target>('svg');
-  const { svg: active, manual } = useActiveSvg();
-  const previewUrl = useSvgBlobUrl(active);
+  const { svg: active, manual, source } = useActiveSvg();
+  const previewUrl = useSvgBlobUrl(active, { trusted: source === 'grid' });
   const grid = useDocument((s) => s.grid);
+  const frames = useDocument((s) => s.frames);
+  const frameIndex = useDocument((s) => s.frameIndex);
+  const multi = frames.length > 1;
   const name = useDocument((s) => s.name);
   const opts = useDocument((s) => s.svg);
-  const animated = manual ? active.includes('@keyframes') : opts.animation.kind !== 'none';
+  const animated = manual ? active.includes('@keyframes') : multi || opts.animation.kind !== 'none';
   const toast = useUi((s) => s.toast);
   const stem = fileStem(name);
 
   const [format, setFormat] = useState<OutputFormat>(opts.format);
-  const svgOut = useMemo(() => (manual ? active : renderSvg(grid, opts, format)), [manual, active, grid, opts, format]);
+  const svgOut = useMemo(() => (manual ? active : renderSvg(frames, opts, format)), [manual, active, frames, opts, format]);
 
   const [scale, setScale] = useState<'1' | '2' | '4' | '8' | 'custom'>('4');
   const [customPx, setCustomPx] = useState(256);
   const [pngBg, setPngBg] = useState<'transparent' | 'solid'>('transparent');
   const [pngBgColor, setPngBgColor] = useState('#ffffff');
   const [busy, setBusy] = useState(false);
+  const [pngWhat, setPngWhat] = useState<'frame' | 'sheet'>('frame');
+  const [gifScale, setGifScale] = useState<'1' | '2' | '4' | '8'>('4');
 
   const componentName = toComponentName(name);
-  const tsx = useMemo(() => svgToTsx(renderSvg(grid, { ...opts, format: 'minimal' }), { componentName, defaultSize: opts.width }), [grid, opts, componentName]);
+  const tsx = useMemo(() => svgToTsx(renderSvg(frames, { ...opts, format: 'minimal' }), { componentName, defaultSize: opts.width }), [frames, opts, componentName]);
   const tsxSource = manual ? svgToTsx(active, { componentName, defaultSize: opts.width }) : tsx;
-  const dataUri = useMemo(() => cssDataUri(manual ? active : renderSvg(grid, opts, 'optimized')), [manual, active, grid, opts]);
+  const dataUri = useMemo(() => cssDataUri(manual ? active : renderSvg(frames, opts, 'optimized')), [manual, active, frames, opts]);
 
   const copy = async (text: string, what: string) => {
     const ok = await copyText(text);
@@ -200,9 +208,27 @@ function ExportBody() {
                 {pngBg === 'solid' && <input type="color" aria-label="PNG background color" value={pngBgColor} onChange={(e) => setPngBgColor(e.target.value)} className="h-7 w-9 rounded border border-line" />}
               </div>
             </div>
+            {multi && !manual && (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>Frames</span>
+                <Segmented
+                  label="PNG frames"
+                  value={pngWhat}
+                  onChange={setPngWhat}
+                  options={[
+                    { value: 'frame', label: `Current frame (${frameIndex + 1})` },
+                    { value: 'sheet', label: `Sprite sheet (${frames.length})` },
+                  ]}
+                />
+              </div>
+            )}
+            {multi && !manual && pngWhat === 'sheet' && scale === 'custom' && <p className="text-[12px] text-muted">Sprite sheets use whole-number scales; custom size uses 1×.</p>}
             <p className="text-muted">
-              {pngSize().w} × {pngSize().h} px · nearest-neighbor, no smoothing
-              {animated && ' · animation not included (first frame)'}
+              {multi && !manual && pngWhat === 'sheet'
+                ? `${pngSize().w * frames.length} × ${pngSize().h} px · ${frames.length} frames left to right`
+                : `${pngSize().w} × ${pngSize().h} px`}{' '}
+              · nearest-neighbor, no smoothing
+              {animated && !(multi && pngWhat === 'sheet') && ` · animation not included (${multi ? 'current' : 'first'} frame)`}
             </p>
             <Button
               variant="primary"
@@ -210,11 +236,73 @@ function ExportBody() {
               onClick={() =>
                 run(async () => {
                   const { w, h } = pngSize();
-                  downloadBlob(await makePng(w, h, pngBg === 'solid' ? pngBgColor : null), `${stem}${scale === '1' ? '' : `@${scale === 'custom' ? `${w}px` : `${scale}x`}`}.png`);
+                  const bg = pngBg === 'solid' ? pngBgColor : null;
+                  if (multi && !manual && pngWhat === 'sheet') {
+                    const s = scale === 'custom' ? 1 : Number(scale);
+                    const sheet = gridsToSheet(frames.map((f) => f.grid), s, bg ? (parseHex(bg) ?? 0) : 0);
+                    downloadBlob(await rgbaToPng(sheet.width, sheet.height, sheet.data), `${stem}-sheet${s === 1 ? '' : `@${s}x`}.png`);
+                    return;
+                  }
+                  downloadBlob(await makePng(w, h, bg), `${stem}${scale === '1' ? '' : `@${scale === 'custom' ? `${w}px` : `${scale}x`}`}.png`);
                 })
               }
             >
               <Download size={14} /> Download PNG
+            </Button>
+          </>
+        )}
+
+        {target === 'gif' && (
+          <>
+            {multi ? (
+              <p className="text-muted">
+                {frames.length} frames · {(totalDuration(frames) / 1000).toFixed(2)} s loop · {grid.width * Number(gifScale)} × {grid.height * Number(gifScale)} px
+              </p>
+            ) : (
+              <p className="text-muted">This drawing has one frame, so the GIF is a still image. Add frames in the timeline under the canvas to animate it.</p>
+            )}
+            {manual && <p className="text-[12px] text-muted">GIFs are made from the drawing's frames; manual SVG edits aren't included.</p>}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>Scale</span>
+              <Segmented
+                label="GIF scale"
+                value={gifScale}
+                onChange={setGifScale}
+                options={[
+                  { value: '1', label: '1×' },
+                  { value: '2', label: '2×' },
+                  { value: '4', label: '4×' },
+                  { value: '8', label: '8×' },
+                ]}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>Background</span>
+              <div className="flex items-center gap-2">
+                <Segmented
+                  label="GIF background"
+                  value={pngBg}
+                  onChange={setPngBg}
+                  options={[
+                    { value: 'transparent', label: 'Transparent' },
+                    { value: 'solid', label: 'Solid' },
+                  ]}
+                />
+                {pngBg === 'solid' && <input type="color" aria-label="GIF background color" value={pngBgColor} onChange={(e) => setPngBgColor(e.target.value)} className="h-7 w-9 rounded border border-line" />}
+              </div>
+            </div>
+            <p className="text-[11px] text-muted">GIF transparency is on/off: cells under 50% opacity become transparent. Shapes and CSS animation presets aren't included; frames are.</p>
+            <Button
+              variant="primary"
+              loading={busy}
+              onClick={() =>
+                run(async () => {
+                  const bg = pngBg === 'solid' ? (parseHex(pngBgColor) ?? 0) : 0;
+                  downloadBlob(await encodeGif(frames, Number(gifScale), bg), `${stem}.gif`);
+                })
+              }
+            >
+              <Download size={14} /> Download GIF
             </Button>
           </>
         )}
@@ -251,14 +339,14 @@ function ExportBody() {
           <>
             <p className="text-muted">
               favicon.svg plus 16, 32, 180 (apple-touch), 192 and 512 px PNGs, zipped.
-              {animated && ' The SVG keeps the animation; the PNGs show the first frame.'}
+              {animated && ` The SVG keeps the animation; the PNGs show the ${multi ? 'current' : 'first'} frame.`}
             </p>
             <Button
               variant="primary"
               loading={busy}
               onClick={() =>
                 run(async () => {
-                  const files: Record<string, Uint8Array | string> = { 'favicon.svg': manual ? active : renderSvg(grid, { ...opts, includeSize: false }, 'optimized') };
+                  const files: Record<string, Uint8Array | string> = { 'favicon.svg': manual ? active : renderSvg(frames, { ...opts, includeSize: false }, 'optimized') };
                   const sizes: Array<[string, number]> = [['favicon-16.png', 16], ['favicon-32.png', 32], ['apple-touch-icon.png', 180], ['icon-192.png', 192], ['icon-512.png', 512]];
                   for (const [file, px] of sizes) {
                     const longest = Math.max(grid.width, grid.height);
@@ -292,6 +380,7 @@ function ExportBody() {
             </div>
             <p className="text-[11px] text-muted">
               Share links encode the drawing in the URL (up to {SHARE_MAX}×{SHARE_MAX}); nothing is uploaded.
+              {multi && ' They hold the current frame only; use the project file to share the whole animation.'}
             </p>
           </>
         )}

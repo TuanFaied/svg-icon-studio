@@ -26,6 +26,7 @@ export function AnimationSettings() {
   const setSvgOptions = useDocument((s) => s.setSvgOptions);
   const timing = timingOf(anim);
   const grid = useDocument((s) => s.grid);
+  const frameCount = useDocument((s) => s.frames.length);
   const version = useDocument((s) => s.version);
   const colors = useMemo(() => usedColors(grid), [grid, version]);
 
@@ -41,8 +42,16 @@ export function AnimationSettings() {
         value={anim.kind}
         // Switching presets keeps the timing the user already tuned.
         onChange={(kind) => setSvgOptions({ animation: defaultAnimation(kind, timing) })}
-        options={KINDS}
+        // Sequence animates the colors of one still image, so it's off for frame animations.
+        options={frameCount > 1 ? KINDS.filter((k) => k.value !== 'sequence' || anim.kind === 'sequence') : KINDS}
       />
+      {frameCount > 1 && (
+        <p className="py-1 text-[11px] leading-snug text-muted">
+          {anim.kind === 'sequence'
+            ? 'Sequence by color is ignored while the drawing has several frames. Pick another preset or remove frames.'
+            : `Plays on top of your ${frameCount}-frame animation.`}
+        </p>
+      )}
 
       {anim.kind === 'none' || !timing ? (
         <p className="py-1 text-[11px] leading-snug text-muted">

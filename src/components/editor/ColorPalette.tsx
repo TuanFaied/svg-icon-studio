@@ -3,7 +3,7 @@
 import { ArrowLeft, ArrowLeftRight, ArrowRight, Download, Plus, RotateCcw, Trash2, Upload } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { alpha, DEFAULT_PALETTE, opaque, pack, type PackedColor, parseHex, toCss, toHex, toHexRGB } from '@/core/grid/color';
-import { usedColors } from '@/core/grid/grid';
+import { usedColorsAll } from '@/core/grid/grid';
 import { Button, cx, IconButton, Section } from '@/components/ui/primitives';
 import { downloadText, pickFile } from '@/lib/files';
 import { fileStem } from '@/core/export/encode';
@@ -98,7 +98,7 @@ export function ColorPalette() {
   const palette = useDocument((s) => s.palette);
   const setPalette = useDocument((s) => s.setPalette);
   const version = useDocument((s) => s.version);
-  const grid = useDocument((s) => s.grid);
+  const frames = useDocument((s) => s.frames);
   const replaceColor = useDocument((s) => s.replaceColor);
   const name = useDocument((s) => s.name);
   const toast = useUi((s) => s.toast);
@@ -106,7 +106,7 @@ export function ColorPalette() {
   const [editing, setEditing] = useState<'primary' | 'secondary'>('primary');
   const [selected, setSelected] = useState<number | null>(null);
   const [replaceFrom, setReplaceFrom] = useState<PackedColor | null>(null);
-  const used = useMemo(() => usedColors(grid), [grid, version]);
+  const used = useMemo(() => usedColorsAll(frames.map((f) => f.grid)), [frames, version]);
 
   const move = (dir: -1 | 1) => {
     if (selected === null) return;

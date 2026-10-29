@@ -1,16 +1,21 @@
 import { deflateSync, inflateSync } from 'fflate';
 import { type PackedColor, parseHex, toHex } from '../grid/color';
+import { clampDuration, DEFAULT_FRAME_MS, type FrameData, MAX_FRAMES } from '../frames/frames';
 import { clampSize, type Grid, MAX_SIZE } from '../grid/grid';
 import { normalizeAnimation } from '../svg/animation';
 import { DEFAULT_SVG_OPTIONS, type Geometry, type SvgOptions } from '../svg/generate';
 
-export const PROJECT_VERSION = 1;
+/** v2 adds `frames` (frame-by-frame animation); v1 files load as a single frame. */
+export const PROJECT_VERSION = 2;
 
 export interface Project {
   name: string;
+  /** The first frame (the still image). */
   grid: Grid;
   palette: PackedColor[];
   svg: SvgOptions;
+  /** All frames, first one included. Absent means a single frame. */
+  frames?: FrameData[];
 }
 
 export interface ProjectFile {
@@ -23,6 +28,8 @@ export interface ProjectFile {
   pixels: string;
   palette: string[];
   settings: SvgOptions;
+  /** v2: every frame with its duration in ms. `pixels` stays the first frame so older readers still load it. */
+  frames?: Array<{ pixels: string; duration: number }>;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -69,6 +76,10 @@ export function serializeProject(p: Project): string {
     pixels: bytesToBase64(gridToBytes(p.grid)),
     palette: p.palette.map(toHex),
     settings: p.svg,
+    frames: (p.frames ?? [{ grid: p.grid, duration: DEFAULT_FRAME_MS }]).map((f) => ({
+      pixels: bytesToBase64(gridToBytes(f.grid)),
+      duration: f.duration,
+    })),
   };
   return JSON.stringify(file, null, 2);
 }
@@ -92,7 +103,20 @@ export function parseProject(json: string): Project {
     throw new Error(`Grid size must be between 1 and ${MAX_SIZE}.`);
   }
   if (typeof f.pixels !== 'string') throw new Error('Project has no pixel data.');
+  const w = clampSize(width);
+  const h = clampSize(height);
   const data = bytesToData(base64ToBytes(f.pixels), width * height);
+  let frames: FrameData[] | undefined;
+  if (Array.isArray(f.frames) && f.frames.length > 0) {
+    if (f.frames.length > MAX_FRAMES) throw new Error(`Projects can have at most ${MAX_FRAMES} frames.`);
+    frames = f.frames.map((fr, i) => {
+      if (!fr || typeof fr.pixels !== 'string') throw new Error(`Frame ${i + 1} has no pixel data.`);
+      return {
+        grid: { width: w, height: h, data: bytesToData(base64ToBytes(fr.pixels), width * height) },
+        duration: clampDuration(Number(fr.duration) || DEFAULT_FRAME_MS),
+      };
+    });
+  }
   const palette = (Array.isArray(f.palette) ? f.palette : [])
     .map((h) => (typeof h === 'string' ? parseHex(h) : null))
     .filter((c): c is number => c !== null && c !== 0);
@@ -102,9 +126,10 @@ export function parseProject(json: string): Project {
   s.animation = normalizeAnimation(s.animation);
   return {
     name: typeof f.name === 'string' && f.name.trim() ? f.name.slice(0, 80) : 'Untitled icon',
-    grid: { width: clampSize(width), height: clampSize(height), data },
+    grid: frames ? frames[0].grid : { width: w, height: h, data },
     palette,
     svg: s,
+    ...(frames ? { frames } : {}),
   };
 }
 

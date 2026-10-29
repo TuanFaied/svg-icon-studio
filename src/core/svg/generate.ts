@@ -1,6 +1,6 @@
 import { alpha, opacityString, type PackedColor, toHexRGB } from '../grid/color';
 import type { Grid } from '../grid/grid';
-import { type AnimationOptions, animationCss, animationPrefix, NO_ANIMATION, sequenceRanks } from './animation';
+import { type AnimationOptions, animationCss, animationPrefix, frameCss, NO_ANIMATION, sequenceRanks } from './animation';
 import { type CellRect, type ColorGroups, individualCells, type Loop, mergedRects, outlineLoops } from './geometry';
 
 export type Geometry = 'rects' | 'paths' | 'cells';
@@ -116,6 +116,84 @@ function fillAttrs(color: PackedColor, useCurrent: boolean, minimal: boolean): s
   return a === 255 ? `fill="${fill}"` : `fill="${fill}" fill-opacity="${opacityString(color)}"`;
 }
 
+export interface SvgFrame {
+  grid: Grid;
+  /** Milliseconds on screen; only used when there are several frames. */
+  duration: number;
+}
+
+/** FNV-1a over a grid's pixels, used to tell whether cached shapes are stale. */
+function gridHash(g: Grid): number {
+  let h = 0x811c9dc5 ^ g.width ^ (g.height << 8);
+  const d = g.data;
+  for (let i = 0; i < d.length; i++) {
+    h = Math.imul(h ^ (d[i] & 0xffff), 0x01000193);
+    h = Math.imul(h ^ (d[i] >>> 16), 0x01000193);
+  }
+  return h >>> 0;
+}
+
+const shapeCache = new WeakMap<Grid, Map<string, { hash: number; shapes: Shape[] }>>();
+
+/**
+ * Shapes for a grid, cached per grid object and output settings. The pixel
+ * hash catches in-place edits, so with many frames only changed ones rebuild.
+ */
+function cachedShapes(g: Grid, opts: SvgOptions, minimal: boolean): Shape[] {
+  const key = `${opts.geometry}|${minimal ? 1 : 0}|${opts.cornerRadius}`;
+  const hash = gridHash(g);
+  let byKey = shapeCache.get(g);
+  if (!byKey) shapeCache.set(g, (byKey = new Map()));
+  const hit = byKey.get(key);
+  if (hit && hit.hash === hash) return hit.shapes;
+  const shapes = shapesFor(g, opts, minimal);
+  byKey.set(key, { hash, shapes });
+  return shapes;
+}
+
+/** Root <svg> attributes shared by still and animated output. */
+function rootAttrs(g: Grid, opts: SvgOptions, minimal: boolean): string[] {
+  const root: string[] = ['xmlns="http://www.w3.org/2000/svg"', `viewBox="0 0 ${g.width} ${g.height}"`];
+  if (opts.includeSize) root.push(`width="${Math.max(1, Math.round(opts.width))}"`, `height="${Math.max(1, Math.round(opts.height))}"`);
+  if (opts.crispEdges) root.push('shape-rendering="crispEdges"');
+  // In minimal mode the evenodd rule moves to the root so it is written once.
+  if (opts.geometry === 'paths' && minimal) root.push('fill-rule="evenodd"');
+  if (opts.decorative) root.push('aria-hidden="true"');
+  else if (opts.title.trim()) root.push('role="img"');
+  return root;
+}
+
+/** One body item per color: a fill group, or the bare element in minimal output. */
+function shapeItems(shapes: Shape[], useCurrent: boolean, minimal: boolean, classFor?: (c: PackedColor) => string): string[] {
+  const indent = minimal ? '' : '  ';
+  const nl = minimal ? '' : '\n';
+  return shapes.map((s) => {
+    const fa = fillAttrs(s.color, useCurrent, minimal) + (classFor?.(s.color) ?? '');
+    // Put the fill straight on a single element instead of wrapping it.
+    if (minimal && s.elements.length === 1) return s.elements[0].replace(/^<(\w+)/, `<$1 ${fa}`);
+    return `<g ${fa}>${nl}${s.elements.map((e) => `${indent}${indent}${e}`).join(nl)}${nl}${indent}</g>`;
+  });
+}
+
+/**
+ * Wraps body items in a group one level deeper. Items carry their own inner
+ * indentation for depth 1, so every line shifts by one indent.
+ */
+function wrapGroup(attrs: string, items: string[], minimal: boolean): string {
+  const indent = minimal ? '' : '  ';
+  const nl = minimal ? '' : '\n';
+  if (items.length === 0) return `<g ${attrs}/>`;
+  const nest = (item: string) => item.split('\n').map((line, i) => (i === 0 ? indent + indent : indent) + line).join('\n');
+  return `<g ${attrs}>${nl}${items.map(nest).join(nl)}${nl}${indent}</g>`;
+}
+
+function finish(root: string[], items: string[], minimal: boolean): string {
+  const indent = minimal ? '' : '  ';
+  const nl = minimal ? '' : '\n';
+  const inner = items.map((l) => indent + l).join(nl);
+  return `<svg ${root.join(' ')}>${nl}${inner}${inner ? nl : ''}</svg>${minimal ? '' : '\n'}`;
+}
+
 /**
  * Converts the grid to an SVG string. Coordinates are integers in grid units.
  * For 'optimized', this returns the minimal form; run it through `optimizeSvg`.
@@ -123,18 +201,9 @@ function fillAttrs(color: PackedColor, useCurrent: boolean, minimal: boolean): s
 export function gridToSvg(g: Grid, opts: SvgOptions): string {
   const minimal = opts.format !== 'readable';
   const useCurrent = opts.currentColor && canUseCurrentColor(g);
-  const paths = opts.geometry === 'paths';
-
-  const root: string[] = ['xmlns="http://www.w3.org/2000/svg"', `viewBox="0 0 ${g.width} ${g.height}"`];
-  if (opts.includeSize) root.push(`width="${Math.max(1, Math.round(opts.width))}"`, `height="${Math.max(1, Math.round(opts.height))}"`);
-  if (opts.crispEdges) root.push('shape-rendering="crispEdges"');
-  // In minimal mode the evenodd rule moves to the root so it is written once.
-  if (paths && minimal) root.push('fill-rule="evenodd"');
   const title = opts.title.trim();
-  if (opts.decorative) root.push('aria-hidden="true"');
-  else if (title) root.push('role="img"');
 
-  const shapes = shapesFor(g, opts, minimal);
+  const shapes = cachedShapes(g, opts, minimal);
   const anim = opts.animation ?? NO_ANIMATION;
   // A sequence animates each color group as one step; the base color stays still.
   const ranks = anim.kind === 'sequence' ? sequenceRanks(g, anim.order, anim.baseColor) : null;
@@ -149,27 +218,61 @@ export function gridToSvg(g: Grid, opts: SvgOptions): string {
     children.push(`<rect width="${g.width}" height="${g.height}" ${fillAttrs(opts.background, false, minimal)}/>`);
   }
 
-  const indent = minimal ? '' : '  ';
-  const nl = minimal ? '' : '\n';
-  const body: string[] = [];
-  for (const s of shapes) {
-    const rank = ranks?.get(s.color);
-    const stepClass = animClass && rank !== undefined ? ` class="${animClass} ${animClass}-s${rank}"` : '';
-    const fa = fillAttrs(s.color, useCurrent, minimal) + stepClass;
-    if (minimal && s.elements.length === 1) {
-      // Put the fill straight on the single element instead of wrapping it.
-      body.push(s.elements[0].replace(/^<(\w+)/, `<$1 ${fa}`));
-    } else {
-      body.push(`<g ${fa}>${nl}${s.elements.map((e) => `${indent}${indent}${e}`).join(nl)}${nl}${indent}</g>`);
-    }
+  const stepClass = (c: PackedColor) => {
+    const rank = ranks?.get(c);
+    return animClass && rank !== undefined ? ` class="${animClass} ${animClass}-s${rank}"` : '';
+  };
+  const body = shapeItems(shapes, useCurrent, minimal, ranks ? stepClass : undefined);
+  // Whole-icon presets move as one group (sequences animate per color instead).
+  const shapesOut = animClass && !ranks ? [wrapGroup(`class="${animClass}"`, body, minimal)] : body;
+  return finish(rootAttrs(g, opts, minimal), [...children, ...shapesOut], minimal);
+}
+
+/**
+ * Frame-by-frame animated SVG: one group per frame, shown in turn by CSS
+ * (see frameCss). A single frame produces exactly `gridToSvg` output.
+ *
+ * Whole-icon presets (spin, pulse, fade, bounce) still apply, wrapping all
+ * frames. `sequence` animates the color groups of a still image, so it is
+ * ignored when there are several frames.
+ */
+export function framesToSvg(frames: readonly SvgFrame[], opts: SvgOptions): string {
+  if (frames.length === 0) throw new Error('framesToSvg needs at least one frame');
+  if (frames.length === 1) return gridToSvg(frames[0].grid, opts);
+  const minimal = opts.format !== 'readable';
+  const first = frames[0].grid;
+  const grids = frames.map((f) => f.grid);
+  const durations = frames.map((f) => f.duration);
+  const useCurrent = opts.currentColor && canUseCurrentColorAll(grids);
+  const title = opts.title.trim();
+  const anim = opts.animation ?? NO_ANIMATION;
+  const preset = anim.kind !== 'none' && anim.kind !== 'sequence' ? anim : null;
+  const cls = animationPrefix(grids, preset ?? NO_ANIMATION, durations);
+
+  const children: string[] = [];
+  if (!opts.decorative && title) children.push(`<title>${escapeXml(title)}</title>`);
+  children.push(`<style>${frameCss(cls, durations)}${preset ? animationCss(cls, preset) : ''}</style>`);
+  if (opts.includeBackground && opts.background !== 0) {
+    children.push(`<rect width="${first.width}" height="${first.height}" ${fillAttrs(opts.background, false, minimal)}/>`);
   }
 
-  // Whole-icon presets move as one group (sequences animate per color instead).
-  // Body items carry their own inner indentation for depth 1, so each line
-  // shifts one level deeper here.
-  const nest = (item: string) => item.split('\n').map((line, i) => (i === 0 ? indent + indent : indent) + line).join('\n');
-  const shapesOut = animClass && !ranks ? [`<g class="${animClass}">${nl}${body.map(nest).join(nl)}${nl}${indent}</g>`] : body;
+  const groups = frames.map((f, i) =>
+    wrapGroup(`class="${cls}-fr ${cls}-f${i}"`, shapeItems(cachedShapes(f.grid, opts, minimal), useCurrent, minimal), minimal),
+  );
+  const shapesOut = preset ? [wrapGroup(`class="${cls}"`, groups, minimal)] : groups;
+  return finish(rootAttrs(first, opts, minimal), [...children, ...shapesOut], minimal);
+}
 
-  const inner = [...children, ...shapesOut].map((l) => indent + l).join(nl);
-  return `<svg ${root.join(' ')}>${nl}${inner}${inner ? nl : ''}</svg>${minimal ? '' : '\n'}`;
+/** currentColor across frames: every drawn cell in every frame is the same color. */
+export function canUseCurrentColorAll(grids: readonly Grid[]): boolean {
+  let first = 0;
+  for (const g of grids) {
+    for (let i = 0; i < g.data.length; i++) {
+      const c = g.data[i];
+      if (c === 0) continue;
+      if (first === 0) first = c;
+      else if (c !== first) return false;
+    }
+  }
+  return first !== 0;
 }

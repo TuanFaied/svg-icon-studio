@@ -56,3 +56,17 @@ export function gridToRgba(g: Grid, scale: number, background: PackedColor = 0):
 export function fileStem(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'icon';
 }
+
+/** Frames side by side, left to right, as one RGBA sheet (for sprite-sheet PNG export). */
+export function gridsToSheet(grids: readonly Grid[], scale: number, background: PackedColor = 0): { width: number; height: number; data: Uint8ClampedArray } {
+  const s = Math.max(1, Math.floor(scale));
+  const fw = grids[0].width * s;
+  const fh = grids[0].height * s;
+  const width = fw * grids.length;
+  const data = new Uint8ClampedArray(width * fh * 4);
+  grids.forEach((g, n) => {
+    const px = gridToRgba(g, s, background);
+    for (let y = 0; y < fh; y++) data.set(px.subarray(y * fw * 4, (y + 1) * fw * 4), (y * width + n * fw) * 4);
+  });
+  return { width, height: fh, data };
+}
