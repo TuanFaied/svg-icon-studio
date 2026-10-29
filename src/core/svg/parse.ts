@@ -76,17 +76,35 @@ export function parsePathData(d: string): Array<Array<[number, number]>> {
   return polys;
 }
 
-/** Even-odd point-in-polygon test summed across all subpaths. */
-function insideEvenOdd(polys: Array<Array<[number, number]>>, px: number, py: number): boolean {
-  let inside = false;
+/**
+ * Even-odd scanline fill: for each row, find where the row's cell-center line
+ * crosses the subpath edges, sort the crossings, and fill cells whose centers
+ * fall between alternate pairs. One pass per row instead of one per cell.
+ */
+function fillEvenOdd(grid: Grid, polys: Array<Array<[number, number]>>, color: PackedColor): void {
+  const edges: Array<[number, number, number, number]> = [];
   for (const poly of polys) {
     for (let a = 0, b = poly.length - 1; a < poly.length; b = a++) {
       const [xa, ya] = poly[a];
       const [xb, yb] = poly[b];
-      if (ya > py !== yb > py && px < ((xb - xa) * (py - ya)) / (yb - ya) + xa) inside = !inside;
+      if (ya !== yb) edges.push([xa, ya, xb, yb]);
     }
   }
-  return inside;
+  const xs: number[] = [];
+  for (let y = 0; y < grid.height; y++) {
+    const py = y + 0.5;
+    xs.length = 0;
+    for (const [xa, ya, xb, yb] of edges) {
+      if (ya > py !== yb > py) xs.push(((xb - xa) * (py - ya)) / (yb - ya) + xa);
+    }
+    xs.sort((m, n) => m - n);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      // Cells whose center x + 0.5 lies in [xs[k], xs[k+1]).
+      const from = Math.max(0, Math.ceil(xs[k] - 0.5));
+      const to = Math.min(grid.width - 1, Math.ceil(xs[k + 1] - 0.5) - 1);
+      for (let x = from; x <= to; x++) grid.data[y * grid.width + x] = color;
+    }
+  }
 }
 
 export interface ParseOptions {
@@ -142,12 +160,7 @@ export function svgToGrid(svg: string, options: ParseOptions = {}): Grid {
       }
     } else if (name === 'path' && a.d) {
       painted++;
-      const polys = parsePathData(a.d);
-      for (let yy = 0; yy < grid.height; yy++) {
-        for (let xx = 0; xx < grid.width; xx++) {
-          if (insideEvenOdd(polys, xx + 0.5, yy + 0.5)) grid.data[yy * grid.width + xx] = color;
-        }
-      }
+      fillEvenOdd(grid, parsePathData(a.d), color);
     }
   }
   if (!grid) throw new Error('No <svg> root element found');
