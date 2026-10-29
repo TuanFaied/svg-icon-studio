@@ -60,6 +60,13 @@ describe('JSX export', () => {
     });
   }
 
+  it('produces valid TSX with a color-highlight sequence', () => {
+    const animation = { ...defaultAnimation('sequence'), effect: 'highlight', highlightColor: pack(255, 204, 0) } as typeof DEFAULT_SVG_OPTIONS.animation;
+    const tsx = svgToTsx(gridToSvg(sample(), { ...DEFAULT_SVG_OPTIONS, format: 'minimal', animation }), { componentName: 'LoaderIcon', defaultSize: 24 });
+    expect(tsx).toContain('fill:#ffcc00');
+    expect(compileErrors(tsx)).toEqual([]);
+  });
+
   it('keeps currentColor for single-color icons', () => {
     const g = createGrid(2, 2);
     g.data[0] = pack(9, 9, 9);

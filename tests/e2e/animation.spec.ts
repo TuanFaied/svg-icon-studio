@@ -221,3 +221,57 @@ test.describe('sequence by color', () => {
     expect(src).toMatch(/fill="#3b82f6"(?![^>]*class=)/);
   });
 });
+
+test.describe('sequence color highlight (#14)', () => {
+  /** Draws two dots in two palette colors and turns on a red highlight sequence. */
+  async function setUp(page: Page) {
+    for (const [hex, x] of [['#3b82f6', 6], ['#22c55e', 16]] as const) {
+      await page.getByRole('button', { name: hex, exact: true }).click();
+      const p = await cellCenter(page, x, 12);
+      await page.mouse.click(p.x, p.y);
+    }
+    await page.getByLabel('Preset', { exact: true }).selectOption('sequence');
+    await page.getByLabel('Effect').selectOption('highlight');
+    await page.getByLabel('Highlight color').fill('#ff0000');
+    await expect.poll(() => previewSource(page)).toContain('{fill:#ff0000}');
+  }
+
+  /** Each step's own fill attribute and its computed fill now, from an inline copy of the preview. */
+  async function stepFills(page: Page) {
+    const svg = await previewSource(page);
+    return page.evaluate(async (markup) => {
+      const host = document.createElement('div');
+      host.innerHTML = markup;
+      document.body.appendChild(host);
+      try {
+        await new Promise((r) => setTimeout(r, 150));
+        const toRgb = (hex: string) => {
+          const n = parseInt(hex.slice(1), 16);
+          return `rgb(${n >> 16}, ${(n >> 8) & 255}, ${n & 255})`;
+        };
+        return [...host.querySelectorAll('[class*="-s"]')].map((el) => ({
+          own: toRgb(el.getAttribute('fill') as string),
+          now: getComputedStyle(el).fill,
+        }));
+      } finally {
+        host.remove();
+      }
+    }, svg);
+  }
+
+  test('steps flash the highlight color and settle back', async ({ page }) => {
+    await setUp(page);
+    const fills = await stepFills(page);
+    expect(fills).toHaveLength(2);
+    // Mid-animation, the steps are somewhere between red and their own colors, not both at rest.
+    expect(fills.some((f) => f.now !== f.own), JSON.stringify(fills)).toBe(true);
+  });
+
+  test('reduced motion shows each step in its own color', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await setUp(page);
+    const fills = await stepFills(page);
+    expect(fills).toHaveLength(2);
+    for (const f of fills) expect(f.now).toBe(f.own);
+  });
+});

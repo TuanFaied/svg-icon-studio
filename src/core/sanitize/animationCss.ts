@@ -6,6 +6,12 @@
  *   @keyframes spin { from { transform: rotate(0deg) } 50%, to { opacity: .5 } }
  *   @media (prefers-reduced-motion: reduce) { .cls { animation: none !important } }
  *
+ * One narrow exception (#14): inside @keyframes only, `fill` may be set to a
+ * plain hex color (`#rgb` or `#rrggbb`). Keyframes only apply while an
+ * animation runs, so a stylesheet still can't permanently recolor or hide
+ * shapes, and no other value form (keywords, url(), var(), currentColor,
+ * !important) is accepted for it.
+ *
  * Anything else (comments, quotes, escapes, url(), @import, unknown properties,
  * unknown functions, attribute selectors, nested media, ...) is rejected, so a
  * passing stylesheet cannot load resources or run code.
@@ -104,13 +110,19 @@ function checkValue(prop: string, raw: string): void {
   if (depth !== 0) fail(`Bad parentheses in ${prop}`);
 }
 
-function checkDeclarations(body: string): void {
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+function checkDeclarations(body: string, inKeyframes = false): void {
   if (body.includes('{') || body.includes('}')) fail('Nested block inside a rule');
   for (const decl of body.split(';')) {
     if (!decl.trim()) continue;
     const colon = decl.indexOf(':');
     if (colon < 0) fail(`Malformed declaration: "${decl.trim()}"`);
     const prop = decl.slice(0, colon).trim().toLowerCase();
+    if (prop === 'fill' && inKeyframes) {
+      if (!HEX_COLOR.test(decl.slice(colon + 1).trim())) fail('fill must be a plain hex color');
+      continue;
+    }
     if (!ALLOWED_PROPERTIES.has(prop)) fail(`Property not allowed: ${prop}`);
     checkValue(prop, decl.slice(colon + 1));
   }
@@ -122,7 +134,7 @@ function checkKeyframes(name: string, body: string): void {
     for (const sel of prelude.split(',')) {
       if (!KEYFRAME_SELECTOR.test(sel.trim())) fail(`Invalid keyframe selector: "${sel.trim()}"`);
     }
-    checkDeclarations(decls);
+    checkDeclarations(decls, true);
   }
 }
 
