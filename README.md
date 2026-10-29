@@ -27,7 +27,7 @@ npm run dev        # http://localhost:3000
 | `npm start` | Serves `out/` on http://localhost:4173 (`scripts/serve.mjs`) |
 | `npm run typecheck` | `tsc --noEmit` (strict) |
 | `npm test` | Vitest unit tests (`src/**/*.test.ts`) |
-| `npm run test:e2e` | Builds, then runs Playwright (desktop + Pixel 7 projects). First run: `npx playwright install chromium` |
+| `npm run test:e2e` | Builds, then runs Playwright: the full suite in Chromium (desktop and Pixel 7), the animation specs in Firefox and WebKit, then the `@perf` stress test. First run: `npx playwright install chromium firefox webkit` |
 
 Deploy by uploading `out/` to any static host.
 
@@ -38,9 +38,10 @@ Deploy by uploading `out/` to any static host.
 | Check | Steps |
 |---|---|
 | **Typecheck, unit tests, build** | `npm ci`, `npm run typecheck`, `npm test`, `npm run build` |
-| **End-to-end tests** | `npm ci`, install Playwright Chromium, `npm run build`, `npx playwright test` (Playwright traces are uploaded when it fails) |
+| **End-to-end tests** | `npm ci`, install Playwright Chromium, `npm run build`, Playwright `desktop`, `mobile` and `perf` projects (traces uploaded when it fails) |
+| **Cross-browser animation tests** | Same, with Firefox and WebKit: the animation, template and frame specs (`firefox` and `webkit` projects) |
 
-`main` is protected: changes land through pull requests, and both checks must pass before merging.
+`main` is protected: changes land through pull requests, and the first two checks must pass before merging. The cross-browser check runs on every PR but isn't required yet.
 
 ## Features
 
@@ -108,6 +109,7 @@ Key decisions:
 - Unit (Vitest, 218 tests): drawing algorithms in all octants, flood fill edges/holes/connectivity, move, resize with all nine anchors, undo grouping/redo clearing/cap, SVG round trip (also with every animation preset, in every geometry and format), empty canvas, `currentColor`, alpha, sanitizer (scripts, handlers, `javascript:`, external refs, animation CSS validator), JSX output compiled with the TypeScript compiler (with and without animation), project files (including tampered animation settings), share links, conversion helpers, and frames: multi-frame SVG (every frame group round-trips in every geometry, timing, SVGO keeps frames, presets wrap frames, TSX compiles), the per-frame cache, GIF encode/decode (delays, exact colors, transparency, background, >255 colors), sprite sheets, project v2 and v1 compatibility, and store frame operations with undo/redo.
 - End-to-end (Playwright, 27 tests): gap-free fast drags, keyboard undo/redo, shortcuts paused in text fields, SVG + PNG download with PNG pixels compared to the grid at 1×, transparent PNG trace, large photo (downscaled, UI stays responsive, size warning), renamed `.txt` rejection, pixel-art import, touch drawing on a phone viewport without page scroll, animation CSS kept in the preview while unsafe CSS is stripped, each animation preset running from the UI and present in all three SVG download formats, reduced motion stopping it, and a sequence drawn from palette colors running clockwise a quarter cycle apart with a static color left still, and loader templates (load and undo/redo, previous project kept in Recent, thumbnails animating only on hover/focus, every template at every size, Reset-dialog entry), and frame animation (draw 4 frames, exactly one visible at a time in the preview, playback on the canvas, SVG / GIF / sprite-sheet export checked by decoding, undo/redo across frame changes, keyboard stepping, onion skin, a v1 project file opening, and a 16-frame 128×128 stress test). Every e2e test also fails on any console error.
 - The `@perf` stress test runs in its own Playwright project after the others, so its timing isn't skewed by, and doesn't slow down, the parallel tests.
+- The animation, template and frame specs also run in Firefox and WebKit (`firefox` / `webkit` projects): presets, sequences, reduced motion, frame playback, GIF and sprite exports, and templates. Playback in the preview is checked with real element screenshots over time. Drawing an animated SVG `<img>` onto a canvas returns a frozen snapshot in WebKit, and fetching an animated `<img>`'s own blob URL stops its animation there, so the tests avoid both.
 - The `?e2e` URL flag exposes a read-only `window.__SIS__` snapshot for these tests.
 
 ## Known limitations

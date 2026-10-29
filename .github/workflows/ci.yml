@@ -59,8 +59,8 @@ jobs:
       - name: Build (static export)
         run: npm run build
 
-      - name: Playwright
-        run: npx playwright test
+      - name: Playwright (Chromium, mobile, perf)
+        run: npx playwright test --project desktop --project mobile --project perf
         env:
           CI: 'true'
 
@@ -69,5 +69,40 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-results
+          path: test-results/
+          retention-days: 7
+
+  cross-browser:
+    # Animated SVG output in Firefox and WebKit (#13). Separate from the required
+    # "End-to-end tests" check while its stability is proven on CI.
+    name: Cross-browser animation tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright Firefox and WebKit
+        run: npx playwright install --with-deps firefox webkit
+
+      - name: Build (static export)
+        run: npm run build
+
+      - name: Playwright (Firefox, WebKit)
+        run: npx playwright test --project firefox --project webkit
+        env:
+          CI: 'true'
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-cross-browser
           path: test-results/
           retention-days: 7
