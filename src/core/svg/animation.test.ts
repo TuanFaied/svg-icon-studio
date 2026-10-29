@@ -145,7 +145,7 @@ describe('sequence by color', () => {
   });
 
   it('validates with many steps at the limits', () => {
-    for (const effect of ['fade', 'pop'] as const) {
+    for (const effect of ['fade', 'pop', 'highlight'] as const) {
       const a = normalizeAnimation({ kind: 'sequence', effect, duration: 0.2, delay: 5, minOpacity: 0, scale: 1.6 }) as ActiveAnimation;
       expect(checkAnimationCss(animationCss('sis-a', a, 64))).toEqual({ ok: true });
     }
@@ -157,5 +157,25 @@ describe('sequence by color', () => {
     expect(normalizeAnimation({ kind: 'sequence', baseColor: -1 })).toMatchObject({ baseColor: null });
     expect(normalizeAnimation({ kind: 'sequence', baseColor: 1.5 })).toMatchObject({ baseColor: null });
     expect(normalizeAnimation({ kind: 'sequence', baseColor: 0xff0000ff })).toMatchObject({ baseColor: 0xff0000ff });
+  });
+});
+
+describe('sequence color highlight (#14)', () => {
+  const highlight = (c: number) => ({ ...(defaultAnimation('sequence') as ActiveAnimation & { kind: 'sequence' }), effect: 'highlight' as const, highlightColor: c });
+
+  it('flashes the highlight color with no end keyframe, so steps settle on their own colors', () => {
+    const css = animationCss('sis-a', highlight(pack(255, 204, 0)), 3);
+    expect(css).toContain('@keyframes sis-a-sequence{0%{fill:#ffcc00}}');
+    expect(checkAnimationCss(css)).toEqual({ ok: true });
+  });
+
+  it('ignores alpha and keeps six-digit hex', () => {
+    expect(animationCss('sis-a', highlight(pack(17, 34, 51, 128)), 1)).toContain('fill:#112233');
+  });
+
+  it('normalizes the highlight color from untrusted input', () => {
+    expect(normalizeAnimation({ kind: 'sequence', effect: 'highlight', highlightColor: 'red' })).toMatchObject({ effect: 'highlight', highlightColor: pack(255, 255, 255) });
+    expect(normalizeAnimation({ kind: 'sequence', effect: 'highlight', highlightColor: -3 })).toMatchObject({ highlightColor: pack(255, 255, 255) });
+    expect(normalizeAnimation({ kind: 'sequence', effect: 'highlight', highlightColor: pack(1, 2, 3) })).toMatchObject({ highlightColor: pack(1, 2, 3) });
   });
 });

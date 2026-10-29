@@ -219,3 +219,25 @@ describe('animation presets in generated SVG', () => {
     expect(still).not.toContain('class=');
   });
 });
+
+describe('sequence color highlight in generated SVG', () => {
+  const styleOf = (svg: string) => svg.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
+  // Pure red is the case SVGO's CSS minifier used to rewrite as `red`.
+  for (const hl of [pack(255, 0, 0), pack(255, 255, 255), pack(18, 52, 86)]) {
+    it(`round-trips with valid CSS in every geometry and format (highlight #${hl.toString(16)})`, () => {
+      const rnd = mulberry32(hl & 0xffff);
+      const animation = { ...defaultAnimation('sequence'), effect: 'highlight', highlightColor: hl } as SvgOptions['animation'];
+      for (const geometry of GEOMETRIES) {
+        for (const format of ['readable', 'minimal', 'optimized'] as const) {
+          const g = blockyGrid(10, 10, rnd);
+          const raw = gridToSvg(g, opts(geometry, { format, animation }));
+          const svg = format === 'optimized' ? optimizeSvg(raw) : raw;
+          const label = `${geometry}/${format}\n${svg}`;
+          expect(gridsEqual(svgToGrid(svg), g), label).toBe(true);
+          expect(checkAnimationCss(styleOf(svg)), label).toEqual({ ok: true });
+          expect(styleOf(svg), label).toMatch(/0%\{fill:#[0-9a-f]{3,6}\}/);
+        }
+      }
+    });
+  }
+});

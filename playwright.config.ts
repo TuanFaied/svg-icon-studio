@@ -6,7 +6,9 @@ const CROSS_BROWSER = /(animation|templates|frames)\.spec\.ts$/;
 
 export default defineConfig({
   testDir: 'tests/e2e',
-  timeout: 45_000,
+  // Firefox and WebKit run alongside Chromium locally; under that load a few
+  // animation tests can approach 45 s.
+  timeout: 60_000,
   fullyParallel: true,
   // One retry on CI absorbs runner timing hiccups; flaky tests still show up as "flaky" in the report.
   retries: process.env.CI ? 1 : 0,

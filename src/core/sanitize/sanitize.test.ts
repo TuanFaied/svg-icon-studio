@@ -56,6 +56,25 @@ describe('sanitizer', () => {
     }
   });
 
+  it('keeps a generated color-highlight sequence, including after SVGO', () => {
+    const g = createGrid(4, 4);
+    g.data[0] = pack(10, 0, 0);
+    g.data[3] = pack(20, 0, 0);
+    const animation = { ...defaultAnimation('sequence'), effect: 'highlight', highlightColor: pack(255, 0, 0) } as typeof DEFAULT_SVG_OPTIONS.animation;
+    for (const format of ['readable', 'minimal', 'optimized'] as const) {
+      const raw = gridToSvg(g, { ...DEFAULT_SVG_OPTIONS, format, animation });
+      const svg = format === 'optimized' ? optimizeSvg(raw) : raw;
+      const out = sanitize(svg, { allowAnimationCss: true });
+      expect(out, format).toContain('{fill:#');
+      expect(out, format).toContain('@keyframes');
+    }
+  });
+
+  it('removes a stylesheet that sets fill outside keyframes', () => {
+    const out = sanitize('<svg xmlns="http://www.w3.org/2000/svg"><style>.a{fill:#fff}</style><rect class="a" width="1" height="1"/></svg>', { allowAnimationCss: true });
+    expect(out).not.toContain('<style');
+  });
+
   it('keeps the attributes this app generates', () => {
     const src = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2" shape-rendering="crispEdges" role="img"><title>t</title><g fill="#f00" fill-opacity="0.5"><path fill-rule="evenodd" d="M0 0h1v1h-1z"/></g></svg>';
     const out = sanitize(src);

@@ -1,4 +1,4 @@
-import type { PackedColor } from '../grid/color';
+import { pack, type PackedColor, toHexRGB } from '../grid/color';
 import type { Grid } from '../grid/grid';
 
 /**
@@ -13,7 +13,7 @@ import type { Grid } from '../grid/grid';
 export type Easing = 'linear' | 'ease-in-out' | 'steps';
 export type Direction = 'normal' | 'reverse' | 'alternate';
 /** How each step of a color sequence animates. */
-export type SequenceEffect = 'fade' | 'pop';
+export type SequenceEffect = 'fade' | 'pop' | 'highlight';
 /** Which color goes first: drawing order, or by angle around the center starting at 12 o'clock. */
 export type SequenceOrder = 'appearance' | 'clockwise' | 'counterclockwise';
 
@@ -46,6 +46,8 @@ export type AnimationOptions =
       minOpacity: number;
       /** Pop effect: peak scale of a step. */
       scale: number;
+      /** Highlight effect: color a step flashes before settling back to its own. Alpha is ignored. */
+      highlightColor: PackedColor;
     } & AnimationTiming);
 
 export type AnimationKind = AnimationOptions['kind'];
@@ -83,7 +85,7 @@ export function defaultAnimation(kind: AnimationKind, keep?: Partial<AnimationTi
       return { kind, height: 2, ...timing, ...(keep ? {} : { duration: 0.8 }) };
     case 'sequence':
       return {
-        kind, effect: 'fade', order: 'clockwise', baseColor: null, minOpacity: 0.2, scale: 1.3,
+        kind, effect: 'fade', order: 'clockwise', baseColor: null, minOpacity: 0.2, scale: 1.3, highlightColor: pack(255, 255, 255),
         ...timing, ...(keep ? {} : { easing: 'linear', duration: 1 }),
       };
   }
@@ -102,6 +104,11 @@ const clamp = (v: unknown, [lo, hi]: readonly [number, number], fallback: number
 };
 const oneOf = <T extends string>(v: unknown, options: readonly T[], fallback: T): T =>
   (options as readonly unknown[]).includes(v) ? (v as T) : fallback;
+
+/** A packed color from untrusted input, or null. */
+function validColor(v: unknown): PackedColor | null {
+  return typeof v === 'number' && Number.isInteger(v) && v > 0 && v <= 0xffffffff ? v : null;
+}
 
 /** Coerces untrusted input (project files, old settings) into valid options. */
 export function normalizeAnimation(input: unknown): AnimationOptions {
@@ -131,11 +138,12 @@ export function normalizeAnimation(input: unknown): AnimationOptions {
       const bc = r.baseColor;
       return {
         kind,
-        effect: oneOf(r.effect, ['fade', 'pop'] as const, 'fade'),
+        effect: oneOf(r.effect, ['fade', 'pop', 'highlight'] as const, 'fade'),
         order: oneOf(r.order, ['appearance', 'clockwise', 'counterclockwise'] as const, 'clockwise'),
-        baseColor: typeof bc === 'number' && Number.isInteger(bc) && bc > 0 && bc <= 0xffffffff ? bc : null,
+        baseColor: validColor(bc),
         minOpacity: clamp(r.minOpacity, LIMITS.minOpacity, 0.2),
         scale: clamp(r.scale, LIMITS.scale, 1.3),
+        highlightColor: validColor(r.highlightColor) ?? pack(255, 255, 255),
         ...timing,
       };
     }
@@ -182,9 +190,11 @@ function keyframes(a: ActiveAnimation): string {
       return `0%,100%{transform:translateY(0px)}50%{transform:translateY(${num(-a.height)}px)}`;
     case 'sequence':
       // A step flares at the start of its turn, then settles for the rest of the cycle.
-      return a.effect === 'fade'
-        ? `0%{opacity:1}100%{opacity:${num(a.minOpacity)}}`
-        : `0%{transform:scale(${num(a.scale)})}50%,100%{transform:scale(1)}`;
+      if (a.effect === 'fade') return `0%{opacity:1}100%{opacity:${num(a.minOpacity)}}`;
+      if (a.effect === 'pop') return `0%{transform:scale(${num(a.scale)})}50%,100%{transform:scale(1)}`;
+      // No end keyframe: CSS falls back to each step's own fill, so one shared
+      // animation returns every step to its own color.
+      return `0%{fill:${toHexRGB(a.highlightColor)}}`;
   }
 }
 

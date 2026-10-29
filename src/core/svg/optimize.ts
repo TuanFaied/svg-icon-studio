@@ -19,6 +19,9 @@ export function optimizeSvg(svg: string): string {
             // Inlining animation rules into style="" drops the class and with it the
             // prefers-reduced-motion override, so keep stylesheet rules where they are.
             inlineStyles: false,
+            // The generator's animation CSS is already minimal, and csso would rewrite
+            // hex colors to names (#ff0000 → red), which the sanitizer rejects for fill.
+            minifyStyles: false,
             // Animation frames rest at opacity:0 until their turn; don't treat them as invisible.
             removeHiddenElems: { opacity0: false },
             removeUnknownsAndDefaults: { keepRoleAttr: true, keepAriaAttrs: true },

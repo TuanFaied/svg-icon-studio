@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { toHex } from '@/core/grid/color';
+import { parseHex, toHex, toHexRGB } from '@/core/grid/color';
 import { usedColors } from '@/core/grid/grid';
 import {
   type AnimationKind, type AnimationTiming, defaultAnimation, type Direction, type Easing, LIMITS, type SequenceEffect,
@@ -96,6 +96,7 @@ export function AnimationSettings() {
                 options={[
                   { value: 'fade', label: 'Fade' },
                   { value: 'pop', label: 'Scale pop' },
+                  { value: 'highlight', label: 'Color highlight' },
                 ]}
               />
               <Select<SequenceOrder>
@@ -124,6 +125,17 @@ export function AnimationSettings() {
                   format={(v) => `${Math.round(v * 100)}%`}
                   onChange={(minOpacity) => setSvgOptions({ animation: { ...anim, minOpacity } })}
                 />
+              ) : anim.effect === 'highlight' ? (
+                <label className="flex items-center justify-between py-1">
+                  <span>Highlight color</span>
+                  <input
+                    type="color"
+                    aria-label="Highlight color"
+                    value={toHexRGB(anim.highlightColor)}
+                    onChange={(e) => setSvgOptions({ animation: { ...anim, highlightColor: parseHex(e.target.value) ?? anim.highlightColor } })}
+                    className="h-7 w-10 rounded border border-line"
+                  />
+                </label>
               ) : (
                 <Slider
                   label="Pop to"
