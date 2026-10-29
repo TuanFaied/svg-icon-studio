@@ -10,6 +10,7 @@ import { PixelCanvas } from '@/components/editor/PixelCanvas';
 import { ConversionSettings } from '@/components/convert/ConversionSettings';
 import { ImageUploader } from '@/components/convert/ImageUploader';
 import { TracePreview } from '@/components/convert/TracePreview';
+import { AnimationSettings } from '@/components/output/AnimationSettings';
 import { DocumentSettings } from '@/components/output/DocumentSettings';
 import { SvgCodeEditor } from '@/components/output/SvgCodeEditor';
 import { ContextPreview, SizeStrip, SvgPreview } from '@/components/output/SvgPreview';
@@ -85,6 +86,7 @@ export function RightPanelContent() {
         <Scroll label="Preview and document settings">
           <SvgPreview />
           <SizeStrip />
+          {mode === 'draw' && <AnimationSettings />}
           {mode === 'draw' && <DocumentSettings />}
           <ContextPreview />
         </Scroll>

@@ -1,5 +1,6 @@
 import { alpha, opacityString, type PackedColor, toHexRGB } from '../grid/color';
 import type { Grid } from '../grid/grid';
+import { type AnimationOptions, animationCss, animationPrefix, NO_ANIMATION } from './animation';
 import { type CellRect, type ColorGroups, individualCells, type Loop, mergedRects, outlineLoops } from './geometry';
 
 export type Geometry = 'rects' | 'paths' | 'cells';
@@ -23,6 +24,8 @@ export interface SvgOptions {
   /** Corner radius in cell units; only honored in 'cells' geometry. */
   cornerRadius: number;
   crispEdges: boolean;
+  /** Whole-icon animation preset (CSS keyframes); the background rect stays still. */
+  animation: AnimationOptions;
 }
 
 export const DEFAULT_SVG_OPTIONS: SvgOptions = {
@@ -38,6 +41,7 @@ export const DEFAULT_SVG_OPTIONS: SvgOptions = {
   background: 0xffffffff,
   cornerRadius: 0,
   crispEdges: true,
+  animation: NO_ANIMATION,
 };
 
 const escapeXml = (s: string) =>
@@ -130,13 +134,18 @@ export function gridToSvg(g: Grid, opts: SvgOptions): string {
   if (opts.decorative) root.push('aria-hidden="true"');
   else if (title) root.push('role="img"');
 
+  const shapes = shapesFor(g, opts, minimal);
+  const anim = opts.animation ?? NO_ANIMATION;
+  // Nothing to move on an empty canvas, so no stylesheet either.
+  const animClass = anim.kind === 'none' || shapes.length === 0 ? null : animationPrefix(g, anim);
+
   const children: string[] = [];
   if (!opts.decorative && title) children.push(`<title>${escapeXml(title)}</title>`);
+  if (animClass && anim.kind !== 'none') children.push(`<style>${animationCss(animClass, anim)}</style>`);
   if (opts.includeBackground && opts.background !== 0) {
     children.push(`<rect width="${g.width}" height="${g.height}" ${fillAttrs(opts.background, false, minimal)}/>`);
   }
 
-  const shapes = shapesFor(g, opts, minimal);
   const indent = minimal ? '' : '  ';
   const nl = minimal ? '' : '\n';
   const body: string[] = [];
@@ -150,6 +159,11 @@ export function gridToSvg(g: Grid, opts: SvgOptions): string {
     }
   }
 
-  const inner = [...children, ...body].map((l) => indent + l).join(nl);
+  // Animated icons move as one group. Body items carry their own inner
+  // indentation for depth 1, so each line shifts one level deeper here.
+  const nest = (item: string) => item.split('\n').map((line, i) => (i === 0 ? indent + indent : indent) + line).join('\n');
+  const shapesOut = animClass ? [`<g class="${animClass}">${nl}${body.map(nest).join(nl)}${nl}${indent}</g>`] : body;
+
+  const inner = [...children, ...shapesOut].map((l) => indent + l).join(nl);
   return `<svg ${root.join(' ')}>${nl}${inner}${inner ? nl : ''}</svg>${minimal ? '' : '\n'}`;
 }

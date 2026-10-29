@@ -56,6 +56,7 @@ function ExportBody() {
   const grid = useDocument((s) => s.grid);
   const name = useDocument((s) => s.name);
   const opts = useDocument((s) => s.svg);
+  const animated = manual ? active.includes('@keyframes') : opts.animation.kind !== 'none';
   const toast = useUi((s) => s.toast);
   const stem = fileStem(name);
 
@@ -201,6 +202,7 @@ function ExportBody() {
             </div>
             <p className="text-muted">
               {pngSize().w} × {pngSize().h} px · nearest-neighbor, no smoothing
+              {animated && ' · animation not included (first frame)'}
             </p>
             <Button
               variant="primary"
@@ -247,7 +249,10 @@ function ExportBody() {
 
         {target === 'favicon' && (
           <>
-            <p className="text-muted">favicon.svg plus 16, 32, 180 (apple-touch), 192 and 512 px PNGs, zipped.</p>
+            <p className="text-muted">
+              favicon.svg plus 16, 32, 180 (apple-touch), 192 and 512 px PNGs, zipped.
+              {animated && ' The SVG keeps the animation; the PNGs show the first frame.'}
+            </p>
             <Button
               variant="primary"
               loading={busy}

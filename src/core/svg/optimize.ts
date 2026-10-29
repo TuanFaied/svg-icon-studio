@@ -16,6 +16,9 @@ export function optimizeSvg(svg: string): string {
             // Keep hex colors (no 'red'/'tan' names) so output stays predictable.
             convertColors: { shortname: false },
             mergePaths: false,
+            // Inlining animation rules into style="" drops the class and with it the
+            // prefers-reduced-motion override, so keep stylesheet rules where they are.
+            inlineStyles: false,
             removeUnknownsAndDefaults: { keepRoleAttr: true, keepAriaAttrs: true },
             convertPathData: { floatPrecision: 3, transformPrecision: 5 },
           },
