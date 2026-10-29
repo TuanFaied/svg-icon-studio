@@ -8,7 +8,11 @@ export interface GridSnapshot {
 
 declare global {
   interface Window {
-    __SIS__: { grid: () => GridSnapshot; view: () => { zoom: number; panX: number; panY: number } };
+    __SIS__: {
+      grid: () => GridSnapshot;
+      view: () => { zoom: number; panX: number; panY: number };
+      frames: () => { index: number; frames: Array<{ duration: number; data: number[] }> };
+    };
   }
 }
 

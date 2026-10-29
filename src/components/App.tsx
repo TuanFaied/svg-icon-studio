@@ -59,6 +59,10 @@ export default function App() {
           const t = useTool.getState();
           return { zoom: t.zoom, panX: t.panX, panY: t.panY };
         },
+        frames: () => {
+          const s = useDocument.getState();
+          return { index: s.frameIndex, frames: s.frames.map((f) => ({ duration: f.duration, data: Array.from(f.grid.data) })) };
+        },
       };
     }
     initUiFromStorage();

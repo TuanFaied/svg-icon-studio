@@ -8,6 +8,7 @@ import {
 import { PatchRecorder } from '@/core/history/patch';
 import { useDocument } from '@/store/document';
 import { MAX_ZOOM, MIN_ZOOM, type ToolId, useTool } from '@/store/tool';
+import { useUi } from '@/store/ui';
 
 type ShapeTool = 'line' | 'rect' | 'ellipse';
 
@@ -22,6 +23,12 @@ type Action =
 
 const PAINT_TOOLS: ToolId[] = ['pencil', 'eraser', 'fill', 'line', 'rect', 'ellipse'];
 const LIVE_BUMP_MS = 120;
+/**
+ * Above this many cells across all frames (four 128×128 frames), skip the
+ * mid-stroke preview updates: regenerating and re-rendering a multi-megabyte
+ * animated SVG every 120 ms can't keep up. The preview updates on stroke end.
+ */
+const LIVE_PREVIEW_MAX_CELLS = 4 * 128 * 128;
 
 function cssVar(name: string, fallback: string): string {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -53,6 +60,9 @@ export class CanvasEngine {
   private ro: ResizeObserver;
   private lastFit = -1;
   private lastGridSize = '';
+  /** Previous / next frame bitmaps for onion skinning, rebuilt when the frame or pixels change. */
+  private onion: Array<HTMLCanvasElement | null> = [null, null];
+  private onionKey = '';
   /** View produced by the last fit; while unchanged, container resizes refit automatically. */
   private fitView = '';
 
@@ -84,6 +94,7 @@ export class CanvasEngine {
 
     this.unsubs.push(useDocument.subscribe(() => this.request()));
     this.unsubs.push(useTool.subscribe(() => this.request()));
+    this.unsubs.push(useUi.subscribe((s, prev) => s.playing !== prev.playing && this.request()));
     const mo = new MutationObserver(() => this.request());
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     this.unsubs.push(() => mo.disconnect());
@@ -164,6 +175,8 @@ export class CanvasEngine {
   private onPointerDown = (e: PointerEvent): void => {
     e.preventDefault();
     this.overlay.focus({ preventScroll: true });
+    // Drawing while the animation plays would edit whichever frame happens to be showing.
+    if (useUi.getState().playing) useUi.getState().setPlaying(false);
     const p = this.local(e);
 
     if (e.pointerType === 'touch') {
@@ -289,7 +302,9 @@ export class CanvasEngine {
         }
         this.hover = a.last;
         const now = performance.now();
-        if (now - a.lastBump > LIVE_BUMP_MS) {
+        const doc = useDocument.getState();
+        const live = doc.frames.length * doc.grid.width * doc.grid.height <= LIVE_PREVIEW_MAX_CELLS;
+        if (live && now - a.lastBump > LIVE_BUMP_MS) {
           a.lastBump = now;
           useDocument.getState().bump();
         } else this.request();
@@ -500,6 +515,66 @@ export class CanvasEngine {
     this.bufferVersion = version;
   }
 
+  private checker: { key: string; pattern: CanvasPattern } | null = null;
+
+  /** A 2×2-square checker tile as a repeating pattern, rebuilt when the size or theme colors change. */
+  private checkerPattern(ctx: CanvasRenderingContext2D, cs: number): CanvasPattern {
+    const a = cssVar('--checker-a', '#ffffff');
+    const b = cssVar('--checker-b', '#e5e7eb');
+    const key = `${cs}|${a}|${b}`;
+    if (this.checker?.key === key) return this.checker.pattern;
+    const tile = document.createElement('canvas');
+    tile.width = tile.height = cs * 2;
+    const tc = tile.getContext('2d') as CanvasRenderingContext2D;
+    tc.fillStyle = a;
+    tc.fillRect(0, 0, cs * 2, cs * 2);
+    tc.fillStyle = b;
+    tc.fillRect(0, 0, cs, cs);
+    tc.fillRect(cs, cs, cs, cs);
+    const pattern = ctx.createPattern(tile, 'repeat') as CanvasPattern;
+    this.checker = { key, pattern };
+    return pattern;
+  }
+
+  /** Rasterizes a grid into a 1-px-per-cell canvas (reusing `into` when given). */
+  private rasterize(g: Grid, into: HTMLCanvasElement | null): HTMLCanvasElement {
+    const c = into ?? document.createElement('canvas');
+    c.width = g.width;
+    c.height = g.height;
+    const cx = c.getContext('2d') as CanvasRenderingContext2D;
+    const img = cx.createImageData(g.width, g.height);
+    for (let i = 0, o = 0; i < g.data.length; i++, o += 4) {
+      const v = g.data[i];
+      img.data[o] = red(v);
+      img.data[o + 1] = green(v);
+      img.data[o + 2] = blue(v);
+      img.data[o + 3] = alpha(v);
+    }
+    cx.putImageData(img, 0, 0);
+    return c;
+  }
+
+  /** Faint previous (and fainter next) frame under the current one; off while playing. */
+  private drawOnionSkin(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+    const doc = useDocument.getState();
+    if (!useTool.getState().onionSkin || useUi.getState().playing || doc.frames.length < 2) return;
+    const i = doc.frameIndex;
+    const neighbors = [doc.frames[i - 1], doc.frames[i + 1]];
+    const key = `${doc.version}:${i}:${doc.frames.length}`;
+    if (key !== this.onionKey) {
+      this.onionKey = key;
+      this.onion = neighbors.map((f, k) => (f ? this.rasterize(f.grid, this.onion[k]) : null));
+    }
+    ctx.save();
+    [0.3, 0.12].forEach((a, k) => {
+      const c = this.onion[k];
+      if (!c || !neighbors[k]) return;
+      ctx.globalAlpha = a;
+      ctx.drawImage(c, x, y, w, h);
+    });
+    ctx.restore();
+  }
+
   private render(): void {
     const doc = useDocument.getState();
     const t = useTool.getState();
@@ -527,30 +602,18 @@ export class CanvasEngine {
 
     // Background preview (never part of the export).
     if (t.background === 'checker') {
-      const cs = Math.max(4, Math.min(zoom / 2, 12));
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(panX, panY, W, H);
-      ctx.clip();
-      ctx.fillStyle = cssVar('--checker-a', '#ffffff');
+      // One pattern fill instead of a fillRect per square (tens of thousands on big grids).
+      const pattern = this.checkerPattern(ctx, Math.round(Math.max(4, Math.min(zoom / 2, 12))));
+      pattern.setTransform(new DOMMatrix().translate(panX, panY));
+      ctx.fillStyle = pattern;
       ctx.fillRect(panX, panY, W, H);
-      ctx.fillStyle = cssVar('--checker-b', '#e5e7eb');
-      const x0 = Math.max(panX, 0), y0 = Math.max(panY, 0);
-      const x1 = Math.min(panX + W, this.cssW), y1 = Math.min(panY + H, this.cssH);
-      const sx = panX + Math.floor((x0 - panX) / cs) * cs;
-      const sy = panY + Math.floor((y0 - panY) / cs) * cs;
-      for (let y = sy; y < y1; y += cs) {
-        for (let x = sx; x < x1; x += cs) {
-          if ((Math.round((x - panX) / cs) + Math.round((y - panY) / cs)) % 2 === 0) ctx.fillRect(x, y, cs, cs);
-        }
-      }
-      ctx.restore();
     } else {
       ctx.fillStyle = t.background === 'light' ? '#ffffff' : '#111827';
       ctx.fillRect(panX, panY, W, H);
     }
 
     ctx.imageSmoothingEnabled = false;
+    this.drawOnionSkin(ctx, panX, panY, W, H);
     ctx.drawImage(this.buffer, panX, panY, W, H);
 
     // Grid lines, aligned to device pixels.

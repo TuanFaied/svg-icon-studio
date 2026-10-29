@@ -19,6 +19,9 @@ export interface UiState {
   /** Pending canvas size waiting on the crop/pad confirmation dialog. */
   pendingResize: { width: number; height: number } | null;
   toasts: Toast[];
+  /** Frame animation is playing on the canvas. */
+  playing: boolean;
+  setPlaying: (playing: boolean) => void;
   setMode: (m: Mode) => void;
   setTheme: (t: ThemePref) => void;
   openDialog: (d: DialogId) => void;
@@ -44,7 +47,9 @@ export const useUi = create<UiState>()((set, get) => ({
   dialog: null,
   pendingResize: null,
   toasts: [],
-  setMode: (mode) => set({ mode }),
+  playing: false,
+  setPlaying: (playing) => set({ playing }),
+  setMode: (mode) => set({ mode, playing: false }),
   setTheme: (theme) => {
     try {
       localStorage.setItem('sis.theme', theme);

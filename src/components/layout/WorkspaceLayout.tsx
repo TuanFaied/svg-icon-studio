@@ -6,6 +6,7 @@ import { Group, Panel, type PanelImperativeHandle, Separator, useDefaultLayout, 
 import { CanvasSettings } from '@/components/editor/CanvasSettings';
 import { ColorPalette } from '@/components/editor/ColorPalette';
 import { DrawingToolbar } from '@/components/editor/DrawingToolbar';
+import { FrameTimeline } from '@/components/editor/FrameTimeline';
 import { PixelCanvas } from '@/components/editor/PixelCanvas';
 import { ConversionSettings } from '@/components/convert/ConversionSettings';
 import { ImageUploader } from '@/components/convert/ImageUploader';
@@ -35,7 +36,15 @@ export function LeftPanelContent() {
 
 export function CenterContent() {
   const mode = useUi((s) => s.mode);
-  return mode === 'draw' ? <PixelCanvas /> : <TracePreview />;
+  if (mode !== 'draw') return <TracePreview />;
+  return (
+    <div className="flex h-full flex-col">
+      <div className="relative min-h-0 flex-1">
+        <PixelCanvas />
+      </div>
+      <FrameTimeline />
+    </div>
+  );
 }
 
 function PanelToggle({ panel, side }: { panel: React.RefObject<PanelImperativeHandle | null>; side: 'left' | 'right' }) {

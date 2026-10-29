@@ -43,6 +43,8 @@ export interface ToolState {
   showGrid: boolean;
   showBoundary: boolean;
   background: 'checker' | 'light' | 'dark';
+  /** Show the previous and next animation frames faintly behind the current one. */
+  onionSkin: boolean;
   selection: Rect | null;
   clipboard: Grid | null;
   /** Incremented to ask the canvas to fit itself to the viewport. */
@@ -73,6 +75,7 @@ export const useTool = create<ToolState>()((set, get) => ({
   showGrid: true,
   showBoundary: true,
   background: 'checker',
+  onionSkin: true,
   selection: null,
   clipboard: null,
   fitRequest: 0,

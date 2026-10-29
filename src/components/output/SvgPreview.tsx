@@ -47,8 +47,8 @@ function useAspect(): string {
 }
 
 export function SvgPreview() {
-  const { svg } = useActiveSvg();
-  const url = useSvgBlobUrl(svg);
+  const { svg, source } = useActiveSvg();
+  const url = useSvgBlobUrl(svg, { trusted: source === 'grid' });
   const usesCurrent = svg.includes('currentColor');
   const [bg, setBg] = useState<Bg>('checker');
   const [custom, setCustom] = useState('#f0e6d2');
@@ -96,10 +96,25 @@ export function SvgPreview() {
 
 const STRIP = [16, 24, 32, 48, 64, 128];
 
+/** Above this size, the multi-image previews are paused: each <img> would re-rasterize megabytes. */
+const HEAVY_PREVIEW = 1_500_000;
+
+function PausedNote({ title, svg }: { title: string; svg: string }) {
+  return (
+    <Section title={title}>
+      <p className="text-[11px] leading-snug text-muted">
+        Paused for very large drawings ({(svg.length / 1e6).toFixed(1)} MB of SVG) to keep editing smooth. The main preview above is still live.
+      </p>
+    </Section>
+  );
+}
+
 export function SizeStrip() {
-  const { svg } = useActiveSvg();
-  const url = useSvgBlobUrl(svg);
+  const { svg, source } = useActiveSvg();
+  const heavy = svg.length > HEAVY_PREVIEW;
+  const url = useSvgBlobUrl(heavy ? '' : svg, { trusted: source === 'grid' });
   const usesCurrent = svg.includes('currentColor');
+  if (heavy) return <PausedNote title="Sizes" svg={svg} />;
   if (!url) return null;
   return (
     <Section title="Sizes">
@@ -121,10 +136,12 @@ export function SizeStrip() {
 }
 
 export function ContextPreview() {
-  const { svg } = useActiveSvg();
-  const url = useSvgBlobUrl(svg);
+  const { svg, source } = useActiveSvg();
+  const heavy = svg.length > HEAVY_PREVIEW;
+  const url = useSvgBlobUrl(heavy ? '' : svg, { trusted: source === 'grid' });
   const usesCurrent = svg.includes('currentColor');
   const name = useDocument((s) => s.name);
+  if (heavy) return <PausedNote title="In context" svg={svg} />;
   if (!url) return null;
   return (
     <Section title="In context">

@@ -70,11 +70,20 @@ export function createSanitizer(win: WindowLike): Sanitizer {
 }
 
 let browserSanitizer: Sanitizer | null = null;
+let last: { svg: string; allow: boolean; out: string } | null = null;
 
-/** Sanitizes with the browser window. Must be called client-side. */
+/**
+ * Sanitizes with the browser window. Must be called client-side. The last
+ * result is reused, so several previews of the same (possibly large) SVG
+ * share one pass.
+ */
 export function sanitizeSvg(svg: string, options?: SanitizeOptions): string {
   if (!browserSanitizer) browserSanitizer = createSanitizer(window);
-  return browserSanitizer(svg, options);
+  const allow = !!options?.allowAnimationCss;
+  if (last && last.svg === svg && last.allow === allow) return last.out;
+  const out = browserSanitizer(svg, options);
+  last = { svg, allow, out };
+  return out;
 }
 
 export interface SvgValidation {

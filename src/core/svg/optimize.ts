@@ -19,6 +19,8 @@ export function optimizeSvg(svg: string): string {
             // Inlining animation rules into style="" drops the class and with it the
             // prefers-reduced-motion override, so keep stylesheet rules where they are.
             inlineStyles: false,
+            // Animation frames rest at opacity:0 until their turn; don't treat them as invisible.
+            removeHiddenElems: { opacity0: false },
             removeUnknownsAndDefaults: { keepRoleAttr: true, keepAriaAttrs: true },
             convertPathData: { floatPrecision: 3, transformPrecision: 5 },
           },

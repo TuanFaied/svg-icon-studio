@@ -145,8 +145,12 @@ export function normalizeAnimation(input: unknown): AnimationOptions {
 /** Short number formatting for CSS: no trailing zeros, at most 3 decimals. */
 const num = (n: number) => String(Math.round(n * 1000) / 1000);
 
-/** FNV-1a over the pixels and animation settings: same icon, same prefix; different icons differ. */
-export function animationPrefix(g: Grid, a: AnimationOptions): string {
+/**
+ * FNV-1a over the pixels and animation settings: same icon, same prefix;
+ * different icons differ. With several frames, every frame's pixels and
+ * duration count (a single frame hashes exactly as a still icon).
+ */
+export function animationPrefix(grids: Grid | readonly Grid[], a: AnimationOptions, durations: readonly number[] = []): string {
   let h = 0x811c9dc5;
   const mix = (n: number) => {
     h ^= n & 0xffff;
@@ -154,9 +158,13 @@ export function animationPrefix(g: Grid, a: AnimationOptions): string {
     h ^= n >>> 16;
     h = Math.imul(h, 0x01000193);
   };
-  mix(g.width);
-  mix(g.height);
-  for (let i = 0; i < g.data.length; i++) mix(g.data[i]);
+  const list = Array.isArray(grids) ? (grids as readonly Grid[]) : [grids as Grid];
+  for (const g of list) {
+    mix(g.width);
+    mix(g.height);
+    for (let i = 0; i < g.data.length; i++) mix(g.data[i]);
+  }
+  if (list.length > 1) for (const d of durations) mix(Math.round(d));
   for (const ch of JSON.stringify(a)) mix(ch.charCodeAt(0));
   return `sis-${(h >>> 0).toString(16).padStart(8, '0').slice(0, 6)}`;
 }
@@ -242,4 +250,32 @@ export function sequenceRanks(g: Grid, order: SequenceOrder, baseColor: PackedCo
     order === 'appearance' ? e[1].first : order === 'clockwise' ? clockAngle(e[1]) : (360 - clockAngle(e[1])) % 360;
   entries.sort((p, q) => key(p) - key(q) || p[1].first - q[1].first);
   return new Map(entries.map(([c], rank) => [c, rank]));
+}
+
+/**
+ * CSS that shows one frame group at a time. Every frame group carries
+ * `${cls}-fr` plus `${cls}-f<i>`; each gets its own keyframes that hold opacity
+ * 1 during its time window and 0 otherwise, with `steps(1)` so values switch
+ * instead of fading. Frames after the first start hidden, so reduced motion
+ * (and any context that ignores CSS animation) shows frame 0.
+ */
+export function frameCss(cls: string, durationsMs: readonly number[]): string {
+  const total = durationsMs.reduce((t, d) => t + d, 0);
+  const pct = (ms: number) => `${num((ms / total) * 100)}%`;
+  const rules = [`.${cls}-fr{animation-duration:${num(total / 1000)}s;animation-timing-function:steps(1);animation-iteration-count:infinite}`];
+  let start = 0;
+  durationsMs.forEach((d, i) => {
+    const end = start + d;
+    const name = `${cls}-k${i}`;
+    rules.push(`.${cls}-f${i}{${i > 0 ? 'opacity:0;' : ''}animation-name:${name}}`);
+    const frames: string[] = [];
+    if (start > 0) frames.push('0%{opacity:0}');
+    frames.push(`${pct(start)}{opacity:1}`);
+    if (end < total) frames.push(`${pct(end)}{opacity:0}`, '100%{opacity:0}');
+    else frames.push('100%{opacity:1}');
+    rules.push(`@keyframes ${name}{${frames.join('')}}`);
+    start = end;
+  });
+  rules.push(`@media (prefers-reduced-motion:reduce){.${cls}-fr{animation:none}}`);
+  return rules.join('');
 }

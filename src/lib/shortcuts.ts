@@ -30,6 +30,8 @@ export const SHORTCUTS: Array<{ keys: string; action: string }> = [
   { keys: 'Delete', action: 'Clear selection' },
   { keys: 'Ctrl + C / V', action: 'Copy / paste selection' },
   { keys: 'Esc', action: 'Deselect' },
+  { keys: ', / .', action: 'Previous / next animation frame' },
+  { keys: 'Enter', action: 'Play / pause the frame animation' },
   { keys: 'Ctrl + Z', action: 'Undo' },
   { keys: 'Ctrl + Shift + Z / Ctrl + Y', action: 'Redo' },
   { keys: 'Ctrl + S', action: 'Save project file' },
@@ -76,6 +78,25 @@ export function useShortcuts(): void {
         case '[': handled(); tool.setBrush(tool.brush - 1); return;
         case ']': handled(); tool.setBrush(tool.brush + 1); return;
         case 'Escape': if (tool.selection) { handled(); tool.set({ selection: null }); } return;
+        case ',': case '<': {
+          handled();
+          const { frames, frameIndex } = doc;
+          doc.selectFrame((frameIndex - 1 + frames.length) % frames.length);
+          return;
+        }
+        case '.': case '>': {
+          handled();
+          doc.selectFrame((doc.frameIndex + 1) % doc.frames.length);
+          return;
+        }
+        case 'Enter': {
+          // Enter on a focused button or link activates it instead.
+          if ((e.target as HTMLElement | null)?.closest?.('button, a, [role="button"]')) return;
+          if (doc.frames.length < 2) return;
+          handled();
+          ui.setPlaying(!ui.playing);
+          return;
+        }
         case 'Delete': case 'Backspace': if (deleteSelection()) handled(); return;
         case 'ArrowLeft': if (nudgeSelection(-1, 0)) handled(); return;
         case 'ArrowRight': if (nudgeSelection(1, 0)) handled(); return;
