@@ -111,6 +111,7 @@ Key decisions:
 - VTracer is loaded at runtime from `public/wasm/` (its package hardcodes a wasm filename that bundlers can’t resolve). The app assumes it is served from the site root or a path where `wasm/` resolves relative to the page.
 - Background removal is a color flood fill from the image edges; it is not subject-aware and works best on solid backgrounds.
 - The SVG parser used for the round trip handles this app’s output (rects and rectilinear paths), not arbitrary SVG.
+- `<style>` survives sanitizing only when it passes a strict animation-CSS validator (`src/core/sanitize/animationCss.ts`): `@keyframes`, a `prefers-reduced-motion` media query, class/element selectors, and `animation-*`, `transform*` and `opacity` with a few transform/timing functions. Anything else (`url()`, `@import`, other properties, comments, quotes) removes the whole block. SMIL (`<animate>`, `<set>`, …) is always stripped.
 - DOMPurify’s SVG profile strips `<use>` entirely, so hand-edited SVGs that rely on `<use href="#id">` lose those references in previews and PNG exports.
 - Icons using `currentColor` show as black inside `<img>`; the previews draw them through a CSS mask so they take the surrounding text color.
 - Lighthouse has not been run as part of this build; accessibility work includes labelled icon buttons, tooltips with shortcuts, focus rings, native `<dialog>`, ARIA radio groups/switches, reduced-motion support and both themes, but the ≥95 score is not yet verified.

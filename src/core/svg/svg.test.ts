@@ -91,6 +91,15 @@ describe('grid → svg → grid round trip', () => {
     expect(gridsEqual(svgToGrid(svg), g)).toBe(true);
   });
 
+  it('ignores <style> animation blocks when parsing', () => {
+    const g = randomGrid(8, 8, mulberry32(11), 0.5, 3);
+    const svg = gridToSvg(g, opts('rects')).replace(
+      /(<svg[^>]*>)/,
+      '$1<style>.a { animation: k 1s infinite } @keyframes k { to { transform: rotate(360deg) } }</style>',
+    );
+    expect(gridsEqual(svgToGrid(svg), g)).toBe(true);
+  });
+
   it('background rect is skipped when parsing with skipBackground', () => {
     const g = randomGrid(6, 6, mulberry32(3), 0.5, 3);
     const svg = gridToSvg(g, opts('rects', { includeBackground: true, background: pack(9, 9, 9) }));
