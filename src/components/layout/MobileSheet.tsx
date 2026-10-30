@@ -3,17 +3,15 @@
 import { ChevronDown, ChevronUp, Copy, Download, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { ToolButtons } from '@/components/editor/DrawingToolbar';
-import { AnimationSettings } from '@/components/output/AnimationSettings';
-import { DocumentSettings } from '@/components/output/DocumentSettings';
+import { Timeline } from '@/components/editor/Timeline';
 import { SvgCodeEditor } from '@/components/output/SvgCodeEditor';
-import { ContextPreview, SizeStrip, SvgPreview } from '@/components/output/SvgPreview';
 import { Button, cx, IconButton } from '@/components/ui/primitives';
 import { fileStem } from '@/core/export/encode';
 import { copyText, downloadText } from '@/lib/files';
 import { useActiveSvg } from '@/lib/svgOutput';
 import { useDocument } from '@/store/document';
 import { useUi } from '@/store/ui';
-import { CenterContent, LeftPanelContent } from './WorkspaceLayout';
+import { CenterContent, LeftPanelContent, PropertiesContent } from './WorkspaceLayout';
 import { toCss } from '@/core/grid/color';
 import { useTool } from '@/store/tool';
 
@@ -52,7 +50,7 @@ export function MobileWorkspace() {
 
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: 'settings', label: mode === 'draw' ? 'Tools' : 'Settings' },
-    { id: 'preview', label: 'Preview' },
+    { id: 'preview', label: 'Properties' },
     { id: 'code', label: 'Code' },
     { id: 'export', label: 'Export' },
   ];
@@ -60,8 +58,10 @@ export function MobileWorkspace() {
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <main className="relative min-h-0 flex-1 bg-[var(--canvas-bg)]">
-        <CenterContent />
+        <CenterContent showZoom />
       </main>
+
+      {mode === 'draw' && <Timeline compact />}
 
       {mode === 'draw' && (
         <div className="flex items-center gap-1 border-t border-line bg-panel px-2 py-1.5">
@@ -109,15 +109,7 @@ export function MobileWorkspace() {
         {open && (
           <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto border-t border-line">
             {tab === 'settings' && <LeftPanelContent />}
-            {tab === 'preview' && (
-              <>
-                <SvgPreview />
-                <SizeStrip />
-                {mode === 'draw' && <AnimationSettings />}
-                {mode === 'draw' && <DocumentSettings />}
-                <ContextPreview />
-              </>
-            )}
+            {tab === 'preview' && <PropertiesContent />}
             {tab === 'code' && (
               <div className="h-full">
                 <SvgCodeEditor />

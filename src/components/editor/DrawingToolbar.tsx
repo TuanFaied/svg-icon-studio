@@ -47,7 +47,8 @@ export function ToolButtons({ compact }: { compact?: boolean }) {
   );
 }
 
-export function DrawingToolbar() {
+/** Options for the current tool; the tool buttons themselves live in the top bar. */
+export function ToolOptions() {
   const tool = useTool((s) => s.tool);
   const brush = useTool((s) => s.brush);
   const setBrush = useTool((s) => s.setBrush);
@@ -57,9 +58,8 @@ export function DrawingToolbar() {
   const usesBrush = ['pencil', 'eraser', 'line', 'rect', 'ellipse'].includes(tool);
 
   return (
-    <Section title="Tools">
-      <ToolButtons />
-      <div className="mt-3 space-y-1">
+    <Section title="Tool options">
+      <div className="space-y-1">
         <div className="flex items-center justify-between gap-2 py-1">
           <span id="brush-label" className={cx(!usesBrush && 'opacity-50')}>Brush size</span>
           <Segmented

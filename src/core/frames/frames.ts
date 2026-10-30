@@ -56,3 +56,18 @@ export function moveItem<T>(items: readonly T[], from: number, to: number): T[] 
   out.splice(to, 0, item);
   return out;
 }
+
+/** m:ss.cc, for the timeline's time readout. */
+export function formatTime(ms: number): string {
+  const t = Math.max(0, Math.floor(ms));
+  const m = Math.floor(t / 60000);
+  const s = Math.floor((t % 60000) / 1000);
+  const cs = Math.floor((t % 1000) / 10);
+  return `${m}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+}
+
+/** Index of the frame showing at time `t` (ms from the loop start), given each frame's start time. */
+export function frameAt(starts: readonly number[], t: number): number {
+  for (let i = starts.length - 1; i >= 0; i--) if (t >= starts[i]) return i;
+  return 0;
+}

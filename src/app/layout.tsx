@@ -18,7 +18,8 @@ export const viewport: Viewport = {
 };
 
 // Set the theme before paint to avoid a light flash in dark mode.
-const themeScript = `(function(){try{var t=localStorage.getItem('sis.theme');var d=t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light'}catch(e){}})()`;
+// Dark is the default; 'system' follows the OS, 'light' forces light.
+const themeScript = `(function(){var d=true;try{var t=localStorage.getItem('sis.theme');d=t==='light'?false:t==='system'?matchMedia('(prefers-color-scheme: dark)').matches:true}catch(e){}document.documentElement.dataset.theme=d?'dark':'light'})()`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

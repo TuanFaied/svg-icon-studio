@@ -11,7 +11,7 @@ import { defaultAnimation } from '../svg/animation';
 import { DEFAULT_SVG_OPTIONS, framesToSvg, type Geometry, gridToSvg, type SvgOptions } from '../svg/generate';
 import { optimizeSvg } from '../svg/optimize';
 import { svgToGrid } from '../svg/parse';
-import { clampDuration, fpsToMs, MAX_FRAME_MS, MIN_FRAME_MS, moveItem, msToFps, totalDuration } from './frames';
+import { clampDuration, formatTime, fpsToMs, frameAt, MAX_FRAME_MS, MIN_FRAME_MS, moveItem, msToFps, totalDuration } from './frames';
 import * as ts from 'typescript';
 
 const RED = pack(255, 0, 0);
@@ -230,5 +230,20 @@ describe('project files with frames', () => {
     expect(p.frames?.map((f) => f.duration)).toEqual([MIN_FRAME_MS, 100]);
     file.frames = Array.from({ length: 65 }, () => file.frames[0]);
     expect(() => parseProject(JSON.stringify(file))).toThrow(/at most 64 frames/);
+  });
+});
+
+describe('timeline helpers', () => {
+  it('formats times as m:ss.cc', () => {
+    expect(formatTime(0)).toBe('0:00.00');
+    expect(formatTime(400)).toBe('0:00.40');
+    expect(formatTime(61_234)).toBe('1:01.23');
+    expect(formatTime(-5)).toBe('0:00.00');
+  });
+
+  it('finds the frame showing at a time', () => {
+    const starts = [0, 100, 400, 450];
+    expect([0, 99, 100, 399, 400, 449, 450, 2000].map((t) => frameAt(starts, t))).toEqual([0, 0, 1, 1, 2, 2, 3, 3]);
+    expect(frameAt(starts, -10)).toBe(0);
   });
 });

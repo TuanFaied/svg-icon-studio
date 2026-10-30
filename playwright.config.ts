@@ -1,8 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 4173;
-/** Specs that cover animated output; these also run in Firefox and WebKit. */
-const CROSS_BROWSER = /(animation|templates|frames)\.spec\.ts$/;
+/** Specs that cover animated output and the editor layout; these also run in Firefox and WebKit. */
+const CROSS_BROWSER = /(animation|templates|frames|layout)\.spec\.ts$/;
 
 export default defineConfig({
   testDir: 'tests/e2e',

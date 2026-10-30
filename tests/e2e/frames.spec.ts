@@ -5,10 +5,10 @@ import { createGrid } from '../../src/core/grid/grid';
 import { pack } from '../../src/core/grid/color';
 import { DEFAULT_SVG_OPTIONS } from '../../src/core/svg/generate';
 import { serializeProject } from '../../src/core/project/project';
-import { cellCenter, openApp } from './helpers';
+import { cellCenter, menuAction, openApp, showPanel } from './helpers';
 
 const frames = (page: Page) => page.evaluate(() => window.__SIS__.frames());
-const timeline = (page: Page) => page.getByRole('region', { name: 'Animation frames' });
+const timeline = (page: Page) => page.getByRole('region', { name: 'Animation timeline' });
 const currentFrameNumber = async (page: Page) =>
   Number(await timeline(page).locator('[aria-current="true"]').getAttribute('data-frame'));
 
@@ -21,7 +21,7 @@ async function click(page: Page, x: number, y: number) {
 async function drawWalk(page: Page) {
   await click(page, 2, 12);
   for (let k = 1; k < 4; k++) {
-    await timeline(page).getByRole('button', { name: 'Add blank frame' }).click();
+    await timeline(page).getByRole('button', { name: /^Add (blank frame|frame to animate)$/ }).click();
     await click(page, 2 + 5 * k, 12);
   }
 }
@@ -151,7 +151,7 @@ test('keyboard: comma / period step frames, Enter plays', async ({ page }) => {
 
 test('onion skin shows the previous frame faintly on the canvas', async ({ page }) => {
   await click(page, 6, 6);
-  await timeline(page).getByRole('button', { name: 'Add blank frame' }).click();
+  await timeline(page).getByRole('button', { name: /^Add (blank frame|frame to animate)$/ }).click();
   const p = await cellCenter(page, 6, 6);
   const sample = () =>
     page.evaluate(({ x, y }) => {
@@ -177,7 +177,7 @@ test('a v1 project file (no frames) still opens', async ({ page }) => {
   const v1 = JSON.parse(serializeProject({ name: 'Old icon', grid: g, palette: [], svg: DEFAULT_SVG_OPTIONS }));
   delete v1.frames;
   v1.version = 1;
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Open project file' }).click()]);
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), menuAction(page, 'Open project file…')]);
   await chooser.setFiles({ name: 'old.icon.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(v1)) });
   await expect(page.getByLabel('Project name')).toHaveValue('Old icon');
   const f = await frames(page);
@@ -199,10 +199,12 @@ test('128×128 with 16 frames stays responsive while drawing @perf', async ({ pa
     return { grid, duration: 80 };
   });
   const json = serializeProject({ name: 'Big', grid: big[0].grid, palette: [], svg: DEFAULT_SVG_OPTIONS, frames: big });
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Open project file' }).click()]);
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), menuAction(page, 'Open project file…')]);
   await chooser.setFiles({ name: 'big.icon.json', mimeType: 'application/json', buffer: Buffer.from(json) });
   await expect(timeline(page)).toContainText('16 frames');
+  await showPanel(page, 'Code');
   await expect(page.getByTestId('code-editor')).toContainText('-f15', { timeout: 20_000 });
+  await showPanel(page, 'Properties');
 
   // Record long main-thread tasks (start time + duration) around a stroke.
   type W = { __long: Array<[number, number]> };

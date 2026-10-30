@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { pack, parseHex, toHex, toHexRGB } from './color';
 import { ellipsePoints, floodRegion, linePoints, mirrorPoints, rectPoints, snapLine } from './draw';
 import { createGrid, getPixel, type Grid } from './grid';
-import { drawLine, floodFill, moveRegion, replaceColor, resize, setPixel } from './ops';
+import { drawLine, flipRegion, floodFill, moveRegion, replaceColor, resize, setPixel } from './ops';
 import { PatchRecorder } from '../history/patch';
 
 const RED = pack(255, 0, 0);
@@ -177,5 +177,23 @@ describe('mirror, move, replace, resize', () => {
     const g = createGrid(2, 2);
     expect(setPixel(new PatchRecorder(g), 5, 5, RED)).toBe(false);
     expect(getPixel(g, 5, 5)).toBe(0);
+  });
+});
+
+describe('flip region', () => {
+  it('mirrors horizontally and vertically, including empty cells, inside the rect only', () => {
+    const g = fromRows(['#b..', '.#..', '...b']);
+    flipRegion(new PatchRecorder(g), { x: 0, y: 0, w: 2, h: 2 }, 'horizontal');
+    expect(toRows(g)).toEqual(['b#..', '#...', '...b']);
+    flipRegion(new PatchRecorder(g), { x: 0, y: 0, w: 2, h: 2 }, 'vertical');
+    expect(toRows(g)).toEqual(['#...', 'b#..', '...b']);
+  });
+
+  it('clips to the grid and is one patch set', () => {
+    const g = fromRows(['#.', '..']);
+    const rec = new PatchRecorder(g);
+    flipRegion(rec, { x: -1, y: 0, w: 3, h: 1 }, 'horizontal');
+    expect(toRows(g)).toEqual(['.#', '..']);
+    expect(rec.toPatches()).toHaveLength(2);
   });
 });

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import { cellCenter, grid, linePoints, makeImage, openApp } from './helpers';
+import { cellCenter, grid, linePoints, makeImage, openApp, showPanel } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
@@ -116,6 +116,7 @@ test.describe('convert', () => {
     await expect(page.getByText('Has transparency')).toBeVisible();
     await page.getByRole('radio', { name: /Silhouette/ }).click();
     await expect(page.getByText(/potrace · \d+ ms/)).toBeVisible({ timeout: 20_000 });
+    await showPanel(page, 'Code');
     await expect(page.getByTestId('code-editor')).toContainText('<path');
   });
 

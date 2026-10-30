@@ -21,6 +21,9 @@ export interface UiState {
   toasts: Toast[];
   /** Frame animation is playing on the canvas. */
   playing: boolean;
+  /** The canvas shows the animated SVG output instead of the editable grid. */
+  canvasPreview: boolean;
+  setCanvasPreview: (on: boolean) => void;
   setPlaying: (playing: boolean) => void;
   setMode: (m: Mode) => void;
   setTheme: (t: ThemePref) => void;
@@ -35,21 +38,24 @@ let toastId = 0;
 const readTheme = (): ThemePref => {
   try {
     const t = localStorage.getItem('sis.theme');
-    return t === 'light' || t === 'dark' ? t : 'system';
+    // Dark editor chrome by default (#17); an explicit choice is kept.
+    return t === 'light' || t === 'system' ? t : 'dark';
   } catch {
-    return 'system';
+    return 'dark';
   }
 };
 
 export const useUi = create<UiState>()((set, get) => ({
   mode: 'draw',
-  theme: 'system',
+  theme: 'dark',
   dialog: null,
   pendingResize: null,
   toasts: [],
   playing: false,
   setPlaying: (playing) => set({ playing }),
-  setMode: (mode) => set({ mode, playing: false }),
+  canvasPreview: false,
+  setCanvasPreview: (canvasPreview) => set({ canvasPreview, ...(canvasPreview ? { playing: false } : {}) }),
+  setMode: (mode) => set({ mode, playing: false, canvasPreview: false }),
   setTheme: (theme) => {
     try {
       localStorage.setItem('sis.theme', theme);

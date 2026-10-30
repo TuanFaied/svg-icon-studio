@@ -88,3 +88,14 @@ export async function makeImage(page: Page, kind: 'transparent' | 'photo'): Prom
   }, kind);
   return Buffer.from(b64, 'base64');
 }
+
+/** Runs an action from the top bar's "More actions" menu. */
+export async function menuAction(page: Page, item: string | RegExp): Promise<void> {
+  await page.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: item }).click();
+}
+
+/** Switches the right panel (desktop) between Properties and Code. */
+export async function showPanel(page: Page, tab: 'Properties' | 'Code'): Promise<void> {
+  await page.getByRole('tablist', { name: 'Right panel' }).getByRole('tab', { name: tab, exact: true }).click();
+}

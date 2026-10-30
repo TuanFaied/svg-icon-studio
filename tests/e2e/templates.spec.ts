@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
-import { cellCenter, grid, openApp } from './helpers';
+import { cellCenter, grid, menuAction, openApp, showPanel } from './helpers';
 
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'Loader templates' });
 const card = (page: Page, id: string) => dialog(page).locator(`[data-template="${id}"]`);
@@ -14,7 +14,7 @@ test('loads a template in one undoable step', async ({ page }) => {
   await page.mouse.click(p.x, p.y);
   const drawn = await grid(page);
 
-  await page.getByRole('button', { name: 'Loader templates' }).click();
+  await menuAction(page, 'Loader templates');
   await dialog(page).getByRole('radio', { name: '32×32' }).click();
   await card(page, 'chasing-dots').click();
 
@@ -25,7 +25,9 @@ test('loads a template in one undoable step', async ({ page }) => {
   const t = await grid(page);
   expect([t.width, t.height]).toEqual([32, 32]);
   expect(new Set(t.data.filter(Boolean)).size).toBe(8);
+  await showPanel(page, 'Code');
   await expect(page.getByTestId('code-editor')).toContainText('-sequence');
+  await showPanel(page, 'Properties');
 
   await page.getByTestId('pixel-canvas').focus();
   await page.keyboard.press('Control+z');
@@ -43,17 +45,17 @@ test('the previous project stays in Recent projects', async ({ page }) => {
   await page.getByLabel('Project name').fill('Before template');
   const p = await cellCenter(page, 2, 2);
   await page.mouse.click(p.x, p.y);
-  await page.getByRole('button', { name: 'Loader templates' }).click();
+  await menuAction(page, 'Loader templates');
   await card(page, 'bar-loader').click();
   await expect(page.getByLabel('Project name')).toHaveValue('Bar loader');
 
-  await page.getByRole('button', { name: 'Recent projects' }).click();
+  await menuAction(page, 'Recent projects');
   const recent = page.getByRole('dialog', { name: 'Recent projects' });
   await expect(recent.getByText('Before template', { exact: true })).toBeVisible();
 });
 
 test('thumbnails animate only while hovered or focused', async ({ page }) => {
-  await page.getByRole('button', { name: 'Loader templates' }).click();
+  await menuAction(page, 'Loader templates');
   const ring = card(page, 'ring-spinner');
   const img = ring.locator('img');
   await expect(img).toHaveAttribute('src', /^blob:/);
@@ -73,7 +75,7 @@ test('every template loads at every size', async ({ page }) => {
   const expected: Record<string, number> = { 'ring-spinner': 2, 'chasing-dots': 8, 'three-dot-pulse': 3, 'bar-loader': 5 };
   for (const size of [16, 24, 32]) {
     for (const [id, colors] of Object.entries(expected)) {
-      await page.getByRole('button', { name: 'Loader templates' }).click();
+      await menuAction(page, 'Loader templates');
       await dialog(page).getByRole('radio', { name: `${size}×${size}` }).click();
       await card(page, id).click();
       await expect(dialog(page)).toBeHidden();
@@ -84,7 +86,7 @@ test('every template loads at every size', async ({ page }) => {
 });
 
 test('the Reset dialog offers templates', async ({ page }) => {
-  await page.getByRole('button', { name: 'Reset' }).click();
+  await menuAction(page, 'Reset…');
   await page.getByRole('dialog', { name: 'Reset' }).getByRole('button', { name: 'Templates' }).click();
   await expect(dialog(page)).toBeVisible();
   await expect(dialog(page).locator('[data-template]')).toHaveCount(4);
