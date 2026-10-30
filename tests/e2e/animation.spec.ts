@@ -1,7 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { cellCenter, openApp } from './helpers';
+import { cellCenter, openApp, showPanel } from './helpers';
 
 // Left half filled; a stepped 180° spin moves it to the right half and back.
 const ANIMATED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" width="64" height="64">
@@ -11,6 +11,7 @@ const ANIMATED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" widt
 </svg>`;
 
 async function pasteIntoCodePanel(page: Page, svg: string) {
+  await showPanel(page, 'Code');
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   const content = page.locator('[data-testid=code-editor] .cm-content');
   // Replace the document through CodeMirror's own view (what EditorView.findFromDOM
@@ -25,6 +26,8 @@ async function pasteIntoCodePanel(page: Page, svg: string) {
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
   }, svg);
   await expect(page.getByText('Manual edits — not linked to drawing.')).toBeVisible();
+  // Back to Properties, where the preview lives.
+  await showPanel(page, 'Properties');
 }
 
 /** Text of the sanitized SVG behind the preview <img>. */

@@ -29,7 +29,7 @@ export const SHORTCUTS: Array<{ keys: string; action: string }> = [
   { keys: 'Arrows', action: 'Nudge selection by 1 cell' },
   { keys: 'Delete', action: 'Clear selection' },
   { keys: 'Ctrl + C / V', action: 'Copy / paste selection' },
-  { keys: 'Esc', action: 'Deselect' },
+  { keys: 'Esc', action: 'Deselect, or leave the on-canvas preview' },
   { keys: ', / .', action: 'Previous / next animation frame' },
   { keys: 'Enter', action: 'Play / pause the frame animation' },
   { keys: 'Ctrl + Z', action: 'Undo' },
@@ -77,7 +77,10 @@ export function useShortcuts(): void {
         case '-': case '_': handled(); tool.zoomBy(0.8); return;
         case '[': handled(); tool.setBrush(tool.brush - 1); return;
         case ']': handled(); tool.setBrush(tool.brush + 1); return;
-        case 'Escape': if (tool.selection) { handled(); tool.set({ selection: null }); } return;
+        case 'Escape':
+          if (ui.canvasPreview) { handled(); ui.setCanvasPreview(false); return; }
+          if (tool.selection) { handled(); tool.set({ selection: null }); }
+          return;
         case ',': case '<': {
           handled();
           const { frames, frameIndex } = doc;

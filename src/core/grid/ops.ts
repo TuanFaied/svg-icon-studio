@@ -150,3 +150,19 @@ export function resize(g: Grid, width: number, height: number, anchor: Anchor = 
   }
   return out;
 }
+
+export type FlipAxis = 'horizontal' | 'vertical';
+
+/** Mirrors the pixels inside `r` in place (clipped to the grid), transparent cells included. */
+export function flipRegion(rec: PatchRecorder, r: Rect, axis: FlipAxis): void {
+  const c = clipRect(r, rec.grid);
+  if (!c) return;
+  const buf = extractRegion(rec.grid, c);
+  for (let y = 0; y < c.h; y++) {
+    for (let x = 0; x < c.w; x++) {
+      const sx = axis === 'horizontal' ? c.w - 1 - x : x;
+      const sy = axis === 'vertical' ? c.h - 1 - y : y;
+      setPixel(rec, c.x + x, c.y + y, buf.data[sy * c.w + sx]);
+    }
+  }
+}
